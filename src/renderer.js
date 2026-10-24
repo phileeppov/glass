@@ -29,6 +29,8 @@
  * @property {[number, number, number]} bg background color for light/dark, 0..1
  * @property {[number, number, number, number]} [sound] loudness, bass, beat, unused; all 0 or absent when sound is off
  * @property {[number, number, number, number]} [ring] beat ripples: age (s) and strength of the newest, then of the one before
+ * @property {Float32Array} [bands] 8 frequency bands, 0..1, low to high
+ * @property {Float32Array} [drops] 4 small ripples, x, y, age (s), strength each
  */
 
 // The icon takes 80% of the frame, leaving 10% per side for the shadow and breathing room.
@@ -78,6 +80,8 @@ uniform vec3 u_bg;
 uniform float u_mode;       // 0 light, 1 dark, 2 transparent
 uniform vec4 u_sound;       // x loudness, y bass, z beat; all 0 when sound is off, and then nothing below changes
 uniform vec4 u_ring;        // beat ripples: x age (s) and y strength of the newest, zw of the one before
+uniform float u_bands[8];   // sound by frequency, low to high, 0..1; laid along the fringe from red to violet
+uniform vec4 u_drops[4];    // small ripples: xy center, z age (s), w strength
 
 const int TAPS = 32;
 const float TAU = 6.2831853;
@@ -181,6 +185,16 @@ float ring(float rr, vec2 r) {
   return x * exp(-x * x) * r.y * exp(-2.5 * r.x);
 }
 
+// A drop: a small round ripple from d.xy, quicker and shorter-lived than the beat ring, like rain on glass.
+// xy bends the image; z is the crest's slope toward the light L, for a glint that shows on empty glass too.
+vec3 drop(vec2 p, vec4 d, vec2 L) {
+  vec2 v = p - d.xy;
+  float r = length(v);
+  vec2 dir = v / max(r, 1e-3);
+  float x = (r - d.z * 1.1) / 0.045;
+  return vec3(dir, dot(dir, L)) * x * exp(-x * x) * d.w * exp(-4.0 * d.z);
+}
+
 // Noise with a uniform spectrum: sample jitter instead of banding.
 float ign(vec2 c) {
   return fract(52.9829189 * fract(dot(c, vec2(0.06711056, 0.00583715))));
@@ -256,7 +270,15 @@ void main() {
   vec2 ripple = wv * 0.05 * u_liquid * nearEdge * side + wv * 0.04 * u_sound.x * nearEdge * side;
   // Beat ripples bend whatever they pass over, the glyph too; the colors split on them below.
   float rr = 1.0 - depth + wob;
-  vec2 wake = nrm * (ring(rr, u_ring.xy) + ring(rr, u_ring.zw)) * 0.07;
+  vec2 L = normalize(vec2(-0.55, 0.85));
+  float beatRing = ring(rr, u_ring.xy) + ring(rr, u_ring.zw);
+  vec2 wake = nrm * beatRing * 0.07;
+  float ripGlint = beatRing * dot(nrm, L);
+  for (int j = 0; j < 4; j++) {
+    vec3 dj = drop(p, u_drops[j], L);
+    wake += dj.xy * 0.05;
+    ripGlint += dj.z * 0.8;
+  }
 
   // Volume: a slab with a rounded rim. Thickness sets its visible width and depth,
   // while Edge width still controls the bevel smear. The ray computes the offset; the index comes from Refraction.
@@ -303,11 +325,14 @@ void main() {
     float jitter = ign(gl_FragCoord.xy);
     for (int i = 0; i < TAPS; i++) {
       float x = (float(i) + jitter) / float(TAPS);
-      vec3 w = spectrum(x);
+      // Sound as light: each color listens to its own band, bass in red through highs in violet.
+      // A loud band bends its color further and weighs it more, so the fringe splits the music the way it splits light.
+      float tone = u_bands[i / 4];
+      vec3 w = spectrum(x) * (1.0 + 2.0 * tone);
       // Red goes deeper, blue stays closer to the edge: red fringe outside, cyan inside.
       // A small spread along the rim softens hard cuts in the glyph.
       float along = (fract(x * 7.31 + jitter) - 0.5) * 0.25;
-      float spread = (0.5 - x) * order * (1.0 + 0.8 * u_sound.z);
+      float spread = (0.5 - x) * order * (1.0 + 0.8 * u_sound.z + 1.8 * tone);
       vec2 off = -dir * (k + kDisp * u_disp * spread * 0.9) + ripple + wake * (1.0 + u_disp * spread * 1.2);
       vec4 c;
       if (vol) {
@@ -328,7 +353,8 @@ void main() {
     inside.rgb = clamp(luma + (inside.rgb - luma) * 1.7, 0.0, a);
   }
 
-  vec2 L = normalize(vec2(-0.55, 0.85));
+  // Ripple crests catch the light on one side and shade the other.
+  if (ripGlint != 0.0) inside.rgb = clamp(inside.rgb + inside.a * 0.4 * ripGlint, 0.0, inside.a);
   float lit = 0.55 + 0.45 * dot(nrm, L);
   // A thin glint right at the edge; photographed glass always has one.
   float glint = exp(-sq((-d - 0.012) / (2.0 * px)));
@@ -364,9 +390,11 @@ void main() {
 const UNIFORMS = [
   "u_sdf", "u_color", "u_texSize", "u_halfPx", "u_n", "u_edge", "u_refract", "u_disp", "u_phase",
   "u_motion", "u_size", "u_tint", "u_sideMix", "u_sideTwo", "u_angle", "u_spread", "u_liquid", "u_volume", "u_depth", "u_bg", "u_mode",
-  "u_sound", "u_ring",
+  "u_sound", "u_ring", "u_bands", "u_drops",
 ];
 const SILENT = [0, 0, 0, 0];
+const NO_BANDS = new Float32Array(8);
+const NO_DROPS = new Float32Array(16);
 
 export class GlassRenderer {
   canvas;
@@ -476,6 +504,8 @@ export class GlassRenderer {
     gl.uniform1f(this.loc.u_mode, params.background === "light" ? 0 : params.background === "dark" ? 1 : 2);
     gl.uniform4fv(this.loc.u_sound, params.sound ?? SILENT);
     gl.uniform4fv(this.loc.u_ring, params.ring ?? SILENT);
+    gl.uniform1fv(this.loc.u_bands, params.bands ?? NO_BANDS);
+    gl.uniform4fv(this.loc.u_drops, params.drops ?? NO_DROPS);
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);

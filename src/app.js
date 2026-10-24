@@ -303,19 +303,25 @@ function previewSize() {
   return Math.min(Math.round(css * Math.min(devicePixelRatio, 2)), 1400);
 }
 
-// Sound on top of the settings: bass rocks the rim, a beat flashes refraction and rainbow;
-// the shader adds the swell of the waves, the pump and the ripples. Silent: the same object, nothing changes.
+// Sound on top of the settings: bass swells the glass and rocks the rim, a beat flashes refraction and rainbow;
+// the shader splits the bands along the fringe, swells the waves, pumps the icon and runs the ripples.
+// Silent: the same object, nothing changes.
 function live(p) {
-  const { level, bass, hit, rings } = sound;
-  if (!level && !bass && !hit && !rings.length) return p;
+  const { level, bass, hit, rings, drops, bands } = sound;
+  if (!level && !bass && !hit && !rings.length && !drops.length && !bands.some(Boolean)) return p;
   const [a, b] = rings;
+  const packed = new Float32Array(16);
+  drops.forEach((d, i) => packed.set([d.x, d.y, d.age, d.amp], i * 4));
   return {
     ...p,
-    motion: p.motion + 0.7 * bass,
+    motion: p.motion + 0.4 * bass,
+    volume: p.volume + 0.3 * bass,
     refraction: p.refraction + 0.6 * hit,
     dispersion: p.dispersion + 0.3 * hit,
     sound: [level, bass, hit, 0],
     ring: [a?.age ?? 0, a?.amp ?? 0, b?.age ?? 0, b?.amp ?? 0],
+    bands,
+    drops: packed,
   };
 }
 

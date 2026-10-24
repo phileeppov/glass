@@ -1,12 +1,50 @@
-// Sound in, a few numbers out: loudness, bass and beats, read from a track or the mic with Web Audio.
+// Sound in, a few numbers out: loudness, bass, eight frequency bands, beats and sparks,
+// read from a track or the mic with Web Audio.
 // Nothing is uploaded: the mic and the track are only analysed in the browser.
 
 /** @typedef {"off" | "mic" | "track"} SoundMode */
 
 const FFT = 2048;
-const RINGS = 2; // ripples alive at once
-const RING_AT = 0.6; // beat strength that sends a ripple
-const MIN_GAP = 0.14; // s between beats, so one kick doesn't fire twice
+// Eight bands from 40 Hz to 12 kHz, evenly spaced on a log scale. The shader lays them along the rainbow fringe,
+// low to high as red to violet, the way glass splits light: long waves on one side, short on the other.
+export const BANDS = 8;
+const EDGES = Array.from({ length: BANDS + 1 }, (_, i) => 40 * 300 ** (i / BANDS));
+const RINGS = 2; // beat ripples alive at once
+const DROPS = 4; // spark drops alive at once
+const RING_AT = 0.6; // beat strength that sends a ripple from the center
+
+// Peak picking on an onset curve: fires just past the top of a rise well above the recent mean,
+// with strength against the recent strongest onset.
+class Onset {
+  mean = 0;
+  dev = 0;
+  rise = 0; // the onset being climbed now
+  peak = 0; // the strongest recent one
+  since = 1;
+
+  constructor(gap) {
+    this.gap = gap; // s, so one hit doesn't fire twice
+  }
+
+  step(v, dt, gate) {
+    this.since += dt;
+    const over = v - this.mean - 1.5 * this.dev;
+    const k = 1 - Math.exp(-dt / 0.6);
+    this.mean += (v - this.mean) * k;
+    this.dev += (Math.abs(v - this.mean) - this.dev) * k;
+    this.peak *= Math.exp(-dt / 3);
+    if (over > 0.1 && over > this.rise * 0.6 && gate) {
+      this.rise = Math.max(this.rise, over);
+      return 0;
+    }
+    if (this.rise <= 0) return 0;
+    this.peak = Math.max(this.peak, this.rise);
+    const strength = this.since > this.gap ? this.rise / this.peak : 0;
+    if (strength) this.since = 0;
+    this.rise = 0;
+    return strength;
+  }
+}
 
 export class Sound {
   /** @type {SoundMode} */
@@ -16,8 +54,10 @@ export class Sound {
   name = ""; // track file name
   level = 0; // loudness 0..1, against the recent peak, so a quiet track moves the glass as much as a loud one
   bass = 0; // 40–160 Hz, 0..1, the same way
+  bands = new Float32Array(BANDS); // 0..1 each, the same way
   hit = 0; // a beat: jumps up, then fades over ~0.25 s
-  rings = []; // ripples from the latest beats, newest first: { age: s, amp: 0..1 }
+  rings = []; // ripples from the center on strong beats, newest first: { age: s, amp: 0..1 }
+  drops = []; // small ripples where a hat or a click lands: { x, y, age, amp }
 
   ctx = null;
   analyser = null;
@@ -28,19 +68,18 @@ export class Sound {
   time = null;
   freq = null;
   prev = null;
+  prevMag = null;
   peakLevel = 0;
   peakBass = 0;
-  prevMag = null;
+  peakBands = new Float32Array(BANDS);
   peakLowFlux = 0;
   peakLogFlux = 0;
-  onset = 0; // running mean and spread of the onset strength, for the beat threshold
-  onsetDev = 0;
-  rise = 0; // the onset being climbed now
-  peakOver = 0; // the strongest recent onset
-  sinceHit = 1;
+  peakHighFlux = 0;
+  beats = new Onset(0.14);
+  sparks = new Onset(0.07);
   sig = 0; // a few samples of the last buffer, to spot a frame with no new audio
   wait = 0; // time since the last frame that had new audio, s
-  last = { level: 0, bass: 0 };
+  last = { level: 0, bass: 0, bands: new Float32Array(BANDS) };
 
   // The context starts on the first tap: browsers only let audio run after one.
   ensure() {
@@ -69,7 +108,7 @@ export class Sound {
 
   // The first frames after a switch compare against an old spectrum and would fire a false beat.
   restart() {
-    this.sinceHit = -0.25;
+    this.beats.since = this.sparks.since = -0.25;
   }
 
   // iPhone mutes Web Audio with the silent switch unless the page says it plays media.
@@ -150,22 +189,36 @@ export class Sound {
   update(dtMs) {
     const dt = Math.min(dtMs, 100) / 1000;
     for (const r of this.rings) r.age += dt;
+    for (const d of this.drops) d.age += dt;
     this.rings = this.rings.filter((r) => r.age < 1.2);
-    this.sinceHit += dt;
+    this.drops = this.drops.filter((d) => d.age < 0.9);
 
-    let level = 0;
-    let bass = 0;
-    let beat = 0;
-    if (this.mode !== "off" && this.ctx?.state === "running") ({ level, bass, beat } = this.analyse(dt));
+    let reading = null;
+    if (this.mode !== "off" && this.ctx?.state === "running") reading = this.analyse(dt);
+    const { level = 0, bass = 0, bands = null, beat = 0, spark = 0 } = reading ?? {};
 
     this.level = follow(this.level, level, dt, 0.02, 0.25);
     this.bass = follow(this.bass, bass, dt, 0.012, 0.18);
+    let loud = this.level + this.bass;
+    for (let b = 0; b < BANDS; b++) {
+      this.bands[b] = follow(this.bands[b], bands ? bands[b] : 0, dt, 0.01, 0.16);
+      loud += this.bands[b];
+    }
     this.hit = Math.max(this.hit * Math.exp(-dt / 0.22), beat);
-    // Only strong beats send a ripple; one on every hat would blur into noise.
+    // Only strong beats send a ripple from the center; one on every hat would blur into noise.
     if (beat > RING_AT) this.rings = [{ age: 0, amp: beat }, ...this.rings].slice(0, RINGS);
+    // A hat, a snare or a click near the mic drops a small ripple somewhere in the glass, like rain.
+    if (spark > 0.4 && this.beats.since > 0.06) {
+      const a = Math.random() * Math.PI * 2;
+      const r = 0.72 * Math.sqrt(Math.random());
+      this.drops = [{ x: r * Math.cos(a), y: r * Math.sin(a), age: 0, amp: spark }, ...this.drops].slice(0, DROPS);
+    }
 
-    const alive = this.level > 1e-3 || this.bass > 1e-3 || this.hit > 1e-3 || this.rings.length > 0;
-    if (!alive) this.level = this.bass = this.hit = 0;
+    const alive = loud > 1e-3 || this.hit > 1e-3 || this.rings.length > 0 || this.drops.length > 0;
+    if (!alive) {
+      this.level = this.bass = this.hit = 0;
+      this.bands.fill(0);
+    }
     return alive || this.mode !== "off";
   }
 
@@ -177,7 +230,7 @@ export class Sound {
     const t = this.time;
     const sig = t[FFT - 1] + 3 * t[FFT - 9] + 7 * t[FFT - 17];
     this.wait += dt;
-    if (sig !== 0 && sig === this.sig) return { ...this.last, beat: 0 };
+    if (sig !== 0 && sig === this.sig) return this.last;
     this.sig = sig;
     dt = this.wait;
     this.wait = 0;
@@ -187,63 +240,69 @@ export class Sound {
     for (const v of this.time) sum += v * v;
     const rms = Math.sqrt(sum / this.time.length);
 
-    // Bass from the spectrum. Flux, how much the spectrum grew since the last frame, finds the beats in two ways:
-    // in the bass band as is (a kick is the loudest jump there), and up to ~3 kHz on a log scale,
-    // where a snare, a clap or a knock near the mic shows up even though it has little bass.
+    // Flux, how much the spectrum grew since the last frame, finds two kinds of hits.
+    // Beats: the bass band as is (a kick is the loudest jump there) plus everything up to ~3 kHz on a log scale,
+    // where a snare, a clap or a knock near the mic shows up though it has little bass.
+    // Sparks: 3–11 kHz on a log scale, hats and clicks.
     const hz = this.ctx.sampleRate / FFT;
     const b0 = Math.max(1, Math.round(40 / hz));
     const b1 = Math.round(160 / hz);
     const f1 = Math.round(3000 / hz);
+    const f2 = Math.min(FFT / 2 - 1, Math.round(11000 / hz));
+    const raw = new Float32Array(BANDS);
+    const count = new Float32Array(BANDS);
     let low = 0;
     let lowFlux = 0;
     let logFlux = 0;
-    for (let i = 1; i <= f1; i++) {
+    let highFlux = 0;
+    let band = 0;
+    for (let i = 1; i <= f2; i++) {
       const db = this.freq[i];
       const mag = Number.isFinite(db) ? 10 ** (db / 20) : 0;
+      const f = i * hz;
       if (i >= b0 && i <= b1) {
         low += mag;
         lowFlux += Math.max(0, mag - this.prevMag[i]);
       }
+      while (band < BANDS - 1 && f >= EDGES[band + 1]) band++;
+      if (f >= EDGES[0]) {
+        raw[band] += mag;
+        count[band]++;
+      }
       const m = Math.log1p(mag * 1000);
-      logFlux += Math.max(0, m - this.prev[i]);
+      const d = Math.max(0, m - this.prev[i]);
+      if (i <= f1) logFlux += d;
+      else highFlux += d;
       this.prev[i] = m;
       this.prevMag[i] = mag;
     }
     low /= b1 - b0 + 1;
     logFlux /= f1;
+    highFlux /= f2 - f1;
 
-    // The peak falls slowly; the floor keeps room noise on the mic from being boosted into motion.
-    this.peakLevel = Math.max(rms, this.peakLevel * Math.exp(-dt / 4), 0.02);
-    this.peakBass = Math.max(low, this.peakBass * Math.exp(-dt / 4), 0.002);
+    // Each value against its own slowly falling peak; the floors keep room noise on the mic from being boosted into motion.
+    const slow = Math.exp(-dt / 4);
+    this.peakLevel = Math.max(rms, this.peakLevel * slow, 0.02);
+    this.peakBass = Math.max(low, this.peakBass * slow, 0.002);
     const level = smooth((rms / this.peakLevel - 0.2) / 0.8);
     const bass = smooth((low / this.peakBass - 0.3) / 0.7);
+    const bands = new Float32Array(BANDS);
+    for (let b = 0; b < BANDS; b++) {
+      const v = count[b] ? raw[b] / count[b] : 0;
+      this.peakBands[b] = Math.max(v, this.peakBands[b] * slow, 2e-4);
+      bands[b] = smooth((v / this.peakBands[b] - 0.25) / 0.75);
+    }
 
-    // Each flux against its own recent peak, so loud and quiet sources work alike; the bass one counts double.
     const decay = Math.exp(-dt / 3);
     this.peakLowFlux = Math.max(lowFlux, this.peakLowFlux * decay, 1e-3);
     this.peakLogFlux = Math.max(logFlux, this.peakLogFlux * decay, 0.05);
-    const onset = lowFlux / this.peakLowFlux + (0.5 * logFlux) / this.peakLogFlux;
+    this.peakHighFlux = Math.max(highFlux, this.peakHighFlux * decay, 0.05);
+    // On a house track kicks come out at 0.6–1, the off-beat bass and hats near 0.3.
+    const beat = this.beats.step(lowFlux / this.peakLowFlux + (0.5 * logFlux) / this.peakLogFlux, dt, rms > 0.01);
+    const spark = this.sparks.step(highFlux / this.peakHighFlux, dt, rms > 0.01);
 
-    // A beat is an onset well above its recent mean. It fires just past the top of the rise, and its strength is
-    // against the recent strongest beat: on a house track kicks reach 0.6–1, the off-beat bass and hats stay near 0.3.
-    const over = onset - this.onset - 1.5 * this.onsetDev;
-    const k = 1 - Math.exp(-dt / 0.6);
-    this.onset += (onset - this.onset) * k;
-    this.onsetDev += (Math.abs(onset - this.onset) - this.onsetDev) * k;
-    this.peakOver *= decay;
-    let beat = 0;
-    if (over > 0.1 && over > this.rise * 0.6 && rms > 0.01) {
-      this.rise = Math.max(this.rise, over);
-    } else if (this.rise > 0) {
-      this.peakOver = Math.max(this.peakOver, this.rise);
-      if (this.sinceHit > MIN_GAP) {
-        beat = this.rise / this.peakOver;
-        this.sinceHit = 0;
-      }
-      this.rise = 0;
-    }
-    this.last = { level, bass };
-    return { level, bass, beat };
+    this.last = { level, bass, bands };
+    return { level, bass, bands, beat, spark };
   }
 }
 
