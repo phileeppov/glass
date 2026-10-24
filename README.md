@@ -2,7 +2,7 @@
 
 Drop a logo, get it back as a glass app icon. Live at [phileeppov.com/glass](https://phileeppov.com/glass), where changes land first. I designed it and built it with Claude Code.
 
-![The smiley logo flat, then the same logo as a glass app icon, looping](media/glass.gif)
+![The smiley logo turns into a glass app icon, moves through three presets and settles back flat](media/glass.gif)
 
 Upload an SVG or PNG, drop it on the page, or paste one from Figma. Out comes a 4-second 1080p loop, square or 16:9, or a 1024 px PNG. Everything runs in the browser, so the logo never leaves it.
 
