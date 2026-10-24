@@ -1,8 +1,9 @@
 // Sound in, a few numbers out: loudness, bass, eight frequency bands, beats and sparks,
-// read from a track or the mic with Web Audio.
+// read from the demo tune, a track or the mic with Web Audio.
 // Nothing is uploaded: the mic and the track are only analysed in the browser.
+import { BEAT, TUNE_LENGTH, chime, renderTune } from "./tune.js";
 
-/** @typedef {"off" | "mic" | "track"} SoundMode */
+/** @typedef {"off" | "demo" | "mic" | "track"} SoundMode */
 
 const FFT = 2048;
 // Eight bands from 40 Hz to 12 kHz, evenly spaced on a log scale. The shader lays them along the rainbow fringe,
@@ -63,6 +64,11 @@ export class Sound {
   analyser = null;
   out = null; // MediaStreamDestination: the sound that goes into the video
   audio = null;
+  tune = null; // the demo tune, rendered once on the first tap of Demo
+  demoBus = null;
+  demoSource = null;
+  demoStart = 0; // context time when the tune started
+  lastPos = 0; // where in the tune the last frame was, s
   micStream = null;
   micSource = null;
   time = null;
@@ -104,6 +110,85 @@ export class Sound {
     track.connect(this.analyser);
     track.connect(ctx.destination);
     track.connect(this.out);
+
+    // The demo tune plays quietly: it's a first taste, not a soundtrack.
+    this.demoBus = ctx.createGain();
+    this.demoBus.gain.value = 0.6;
+    this.demoBus.connect(this.analyser);
+    this.demoBus.connect(ctx.destination);
+    this.demoBus.connect(this.out);
+  }
+
+  // The tune renders once, ahead of time if the page asks, so Demo starts at once. A failed render isn't kept.
+  prepare() {
+    this.tune ??= renderTune().catch((e) => {
+      this.tune = null;
+      throw e;
+    });
+    return this.tune;
+  }
+
+  async demo() {
+    this.wanted = "demo";
+    this.ensure();
+    this.audio.pause();
+    this.stopMic();
+    this.session("playback");
+    const resumed = this.ctx.resume();
+    const buffer = await this.prepare();
+    await resumed;
+    if (this.wanted !== "demo") return;
+    this.playTune(buffer);
+    this.restart();
+    this.mode = "demo";
+  }
+
+  playTune(buffer) {
+    this.stopTune();
+    const src = this.ctx.createBufferSource();
+    src.buffer = buffer;
+    src.loop = true;
+    src.connect(this.demoBus);
+    src.start();
+    this.demoSource = src;
+    this.demoStart = this.ctx.currentTime;
+    // Just before the first beat, so the opening thump counts.
+    this.lastPos = TUNE_LENGTH - (this.ctx.outputLatency || 0) - 0.001;
+  }
+
+  // Demo beats come from the score, not the detector: the tune is ours, so they land exactly, the first one included.
+  score() {
+    const len = TUNE_LENGTH;
+    const pos = (((this.ctx.currentTime - (this.ctx.outputLatency || 0) - this.demoStart) % len) + len) % len;
+    const prev = this.lastPos;
+    this.lastPos = pos;
+    const crossed = (step) => pos < prev || Math.floor(pos / step) !== Math.floor(prev / step);
+    const beat = crossed(BEAT) ? 1 : 0;
+    return { beat, spark: !beat && crossed(BEAT / 2) ? 0.8 : 0 };
+  }
+
+  stopTune() {
+    try {
+      this.demoSource?.stop();
+    } catch {
+      // Already stopped.
+    }
+    this.demoSource?.disconnect();
+    this.demoSource = null;
+  }
+
+  // Back to the first beat: a video in Demo is exactly one loop of the tune.
+  async rewind() {
+    if (this.mode !== "demo") return;
+    this.playTune(await this.tune);
+  }
+
+  // A touch on the icon rings the glass. Not while sound is on: the tune, the track or the mic has the floor.
+  chime() {
+    if (this.mode !== "off") return;
+    this.ensure();
+    this.ctx.resume();
+    chime(this.ctx, this.ctx.destination);
   }
 
   // The first frames after a switch compare against an old spectrum and would fire a false beat.
@@ -124,6 +209,7 @@ export class Sound {
     this.wanted = "mic";
     this.ensure();
     this.audio.pause();
+    this.stopTune();
     this.session("play-and-record");
     const resumed = this.ctx.resume();
     if (!navigator.mediaDevices?.getUserMedia) throw new Error("insecure");
@@ -148,6 +234,7 @@ export class Sound {
     this.wanted = "track";
     this.ensure();
     this.stopMic();
+    this.stopTune();
     this.session("playback");
     if (file) {
       if (this.audio.src) URL.revokeObjectURL(this.audio.src);
@@ -169,6 +256,7 @@ export class Sound {
   off() {
     this.wanted = this.mode = "off";
     this.audio?.pause();
+    this.stopTune();
     this.stopMic();
   }
 
@@ -195,6 +283,7 @@ export class Sound {
 
     let reading = null;
     if (this.mode !== "off" && this.ctx?.state === "running") reading = this.analyse(dt);
+    if (reading && this.mode === "demo") reading = { ...reading, ...this.score() };
     const { level = 0, bass = 0, bands = null, beat = 0, spark = 0 } = reading ?? {};
 
     this.level = follow(this.level, level, dt, 0.02, 0.25);

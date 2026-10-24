@@ -2,6 +2,7 @@
 import { GlassRenderer, LOGO_FILL, SDF_SPREAD } from "./renderer.js";
 import { buildSdf } from "./sdf.js";
 import { Sound } from "./sound.js";
+import { TUNE_LENGTH } from "./tune.js";
 
 const LAYER = 1024; // logo textures, px
 const EXPORT_PX = 1024;
@@ -493,20 +494,23 @@ document.addEventListener("drop", (e) => {
 
 // --- Sound ---
 
-// Off, Mic or Track. Track plays a file, picked with Track itself or dropped on the page.
+// Off, Demo, Mic or Track. Demo is a glass tune made in the browser, no permission or file needed.
+// Track plays a file, picked with Track itself or dropped on the page.
 const soundRadio = (mode) => root.querySelector(`input[name=sound][value=${mode}]`);
 const trackRadio = soundRadio("track");
 const CAPTION = caption.textContent;
 
+// The line under the buttons says what the video will be: the loop, one round of the tune, or a stretch of the sound.
 function showSound(mode) {
   soundRadio(mode).checked = true;
-  caption.textContent = mode === "off" ? CAPTION : caption.dataset.sound;
+  caption.textContent = mode === "off" ? CAPTION : mode === "demo" ? caption.dataset.demo : caption.dataset.sound;
 }
 
 async function setSound(mode, file) {
   showSound(mode);
   try {
-    if (mode === "mic") await sound.mic();
+    if (mode === "demo") await sound.demo();
+    else if (mode === "mic") await sound.mic();
     else if (mode === "track") await sound.track(file);
     else sound.off();
     if (sound.wanted === mode) say(mode === "track" ? `♪ ${sound.name}` : "");
@@ -530,6 +534,7 @@ function soundError(mode, e) {
     if (name === "NotReadableError") return "The mic is busy in another app.";
     return "Couldn't start the mic.";
   }
+  if (mode === "demo") return "Couldn't play the demo in this browser.";
   if (name === "NotAllowedError") return "Tap Track to play it.";
   return "Couldn't play that file. Try MP3, M4A or WAV.";
 }
@@ -541,6 +546,15 @@ for (const input of root.querySelectorAll("input[name=sound]")) {
     setSound(input.value);
   });
 }
+
+// The demo tune renders in the background after the first touch anywhere on the page, so Demo starts without a wait.
+function warmUp() {
+  removeEventListener("pointerdown", warmUp);
+  removeEventListener("keydown", warmUp);
+  (window.requestIdleCallback ?? setTimeout)(() => sound.prepare().catch(() => {}));
+}
+addEventListener("pointerdown", warmUp);
+addEventListener("keydown", warmUp);
 
 // Track tapped while it's already selected: start it if it's stopped, otherwise pick another file.
 trackRadio.parentElement.addEventListener("click", (e) => {
@@ -709,7 +723,8 @@ videoButton.addEventListener("click", async () => {
     : ["video/mp4;codecs=avc1.640028", "video/mp4", "video/webm;codecs=vp9", "video/webm"];
   const type = typeof MediaRecorder === "undefined" ? undefined : types.find((t) => MediaRecorder.isTypeSupported(t));
   if (!type) return say("This browser can't record video. Try Chrome or Safari.");
-  const length = audio ? CLIP : PERIOD;
+  const demo = sound.mode === "demo";
+  const length = !audio ? PERIOD : demo ? TUNE_LENGTH * 1000 : CLIP;
 
   recording = true;
   // Must reset: otherwise kick() after recording thinks the loop is alive, and the preview freezes.
@@ -761,6 +776,8 @@ videoButton.addEventListener("click", async () => {
     recorder.ondataavailable = (e) => e.data.size && chunks.push(e.data);
     const done = new Promise((resolve) => (recorder.onstop = () => resolve()));
 
+    // In Demo the video is one round of the tune from its first beat, so the first second already moves.
+    if (demo) await sound.rewind();
     recorder.start();
     const start = performance.now();
     let prev = start;
