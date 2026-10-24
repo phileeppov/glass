@@ -71,34 +71,6 @@ h1 {
   letter-spacing: -0.065em;
   margin: 0 0 12px;
 }
-/* The heading in glass: a band cut from a square glass render, sized in em so it scales with the heading.
-   Until it renders (or without WebGL) the plain word shows. */
-.title-glass {
-  display: none;
-}
-.has-glass-title .title-glass {
-  position: relative;
-  display: block;
-  width: 3.4em;
-  height: 1em;
-  margin-left: -0.39em; /* the glass rim around the word sits in the margin, so the letters line up with the text below */
-  overflow: hidden;
-}
-.title-glass canvas {
-  position: absolute;
-  left: 0;
-  top: 50%;
-  width: 100%;
-  aspect-ratio: 1;
-  transform: translateY(-50%);
-}
-.has-glass-title h1 .word {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-}
 .intro p {
   margin: 0;
   font-size: var(--text-body);

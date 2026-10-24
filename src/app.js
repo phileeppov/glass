@@ -17,7 +17,7 @@ const TAU = Math.PI * 2;
 const DEMO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><g fill="none" stroke="#0a0a0a" stroke-width="7" stroke-linecap="round"><circle cx="50" cy="50" r="42"/><path d="M31 46Q37 37 43 46M57 46Q63 37 69 46"/><path d="M34 59Q50 72 66 59"/></g></svg>`;
 
 const root = document.querySelector("[data-glass]");
-const canvas = root.querySelector("[data-stage] canvas"); // the stage, not the small one in the heading
+const canvas = root.querySelector("canvas");
 const stage = root.querySelector("[data-stage]");
 const fileInput = root.querySelector("input[type=file]");
 const pngButton = root.querySelector("[data-png]");
@@ -216,8 +216,7 @@ function trim(img) {
 }
 
 // Two textures: a distance field for the shape, and color extended past the edge so the blurred rim doesn't darken.
-// `into` is the main renderer, or the small one that draws the heading.
-function buildLogo(img, crop, into = renderer) {
+function buildLogo(img, crop) {
   const k = (LAYER * LOGO_FILL) / Math.max(crop.w, crop.h);
   const w = crop.w * k;
   const h = crop.h * k;
@@ -256,8 +255,8 @@ function buildLogo(img, crop, into = renderer) {
     px[i + 3] = 255;
   }
   ctx.putImageData(data, 0, 0);
-  if (into === renderer) logoLuma = (0.299 * avg[0] + 0.587 * avg[1] + 0.114 * avg[2]) / 255;
-  into.setLogo(sdf, color, LAYER);
+  logoLuma = (0.299 * avg[0] + 0.587 * avg[1] + 0.114 * avg[2]) / 255;
+  renderer.setLogo(sdf, color, LAYER);
 }
 
 function pixels(w, h, paint) {
@@ -433,7 +432,6 @@ function draw() {
   renderer.setSize(previewSize());
   const phase = phaseAt(performance.now());
   renderer.render(withTurn(feel(live(shown)), phase), phase);
-  drawTitle(phase);
 }
 
 function loop(now) {
@@ -1414,56 +1412,6 @@ function tried(feature) {
   }
 }
 showNew();
-
-// --- The heading in glass ---
-
-// "Glass" in the heading is drawn by a second, small renderer: the word is the logo, the glass fills the frame, and a band
-// of it shows, so the rim bends the first and last letters. It breathes with the stage and leans with the cursor.
-// The plain heading stays for screen readers and shows wherever a second WebGL context isn't available.
-const titleBox = root.querySelector("[data-title]");
-let titleRenderer = null;
-try {
-  titleRenderer = new GlassRenderer(titleBox.querySelector("canvas"));
-} catch {
-  // No second context: the text heading stays.
-}
-const TITLE_LOOK = {
-  n: 5, refraction: 1.0, dispersion: 1, edge: 0.16, motion: 0.5, size: 0.8, tint: [0, 0, 0], tintMix: 0,
-  sideMix: 1, sideTwo: 1, angle: 0, spread: 0.3, liquid: 0.35, volume: 0.3, depth: 1, // the rim bends only the two ends
-  // The glass body is the background lifted 5% toward white; starting that much lower makes it match the page,
-  // so the band's top and bottom edges vanish and only the two prismatic ends show.
-  background: "light", bg: BG.light.map((c) => (c - 0.05) / 0.95), frame: 1, shadow: 0,
-};
-
-async function buildTitle() {
-  if (!titleRenderer) return;
-  const font = `500 400px Onest, "Helvetica Neue", Arial, sans-serif`;
-  try {
-    await document.fonts.load(font, "Glass");
-  } catch {
-    // Fallback font draws it.
-  }
-  const c = document.createElement("canvas");
-  c.width = 1400;
-  c.height = 600;
-  const ctx = c.getContext("2d");
-  ctx.font = font;
-  if ("letterSpacing" in ctx) ctx.letterSpacing = "-26px"; // the heading's −6.5% tracking at 400 px
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillStyle = "#0a0a0a";
-  ctx.fillText("Glass", c.width / 2, c.height / 2);
-  buildLogo(c, trim(c), titleRenderer);
-  root.classList.add("has-glass-title");
-  drawTitle(phaseAt(performance.now()));
-}
-
-function drawTitle(phase) {
-  if (!titleRenderer || !root.classList.contains("has-glass-title")) return;
-  titleRenderer.setSize(Math.round(titleBox.clientWidth * Math.min(devicePixelRatio, 2)));
-  titleRenderer.render({ ...TITLE_LOOK, motion: reducedMotion ? 0 : 0.5, tilt: [tilt[0], tilt[1]] }, phase);
-}
-buildTitle();
 // A shared link opens on its look; the logo is the demo ☺ until you add your own.
 openLook();
 loadSvg(DEMO_SVG).then(kick);
