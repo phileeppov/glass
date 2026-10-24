@@ -150,6 +150,7 @@ async function loadUrl(url) {
   say("");
   fitColorToBackground();
   applyColor();
+  renderThumbs();
   draw();
   kick();
 }
@@ -185,6 +186,7 @@ async function loadText(text) {
   say("");
   fitColorToBackground();
   applyColor();
+  renderThumbs();
   draw();
   kick();
 }
@@ -525,7 +527,10 @@ for (const input of root.querySelectorAll("input[type=radio]")) {
     if (input.name === "background") {
       fitColorToBackground();
     }
-    if (input.name === "color") autoColor = false;
+    if (input.name === "color") {
+      autoColor = false;
+      renderThumbs();
+    }
     applyColor();
     kick();
   });
@@ -790,6 +795,48 @@ const PRESETS = {
     checks: { volume: true, spin: false },
   },
 };
+// A preset as shader numbers, without touching the inputs: for the thumbnails on the preset keys and for trying a preset on hover.
+// The logo color follows the same rule as the page: a dark logo turns white on a dark background.
+function presetLook(name, still = false) {
+  const preset = PRESETS[name];
+  const background = preset.radios.background;
+  const dark = background === "dark";
+  const white = dark && (logoColor === "black" || logoColor === "white" || (logoColor === "original" && logoLuma < 0.3));
+  const tint = white ? [1, 1, 1] : logoColor === "black" && !dark ? hexToRgb(tokens.getPropertyValue("--color-black")) : logoColor === "white" && !autoColor ? [1, 1, 1] : null;
+  const { angle = angleDeg, thickness: slab = thickness, motion = params.motion, ...ranges } = preset.ranges;
+  const keepTint = lastTint;
+  const look = target({
+    ...params,
+    ...ranges,
+    motion: still ? 0 : motion,
+    shape: preset.radios.shape,
+    sides: preset.radios.sides,
+    background,
+    bg: dark ? BG.dark : BG.light,
+    tint,
+    volume: slab,
+    depth: preset.checks.volume ? 1 : 0,
+  });
+  lastTint = keepTint; // target() remembers the last tint for easing; a thumbnail mustn't change it
+  return { ...look, angle: (angle / 180) * Math.PI };
+}
+
+// Thumbnails: each preset drawn by the main renderer at 192 px, filling the frame, then copied into its key.
+// Light presets render with no background, so the key's tray shows around the glass.
+const thumbs = root.querySelectorAll("[data-thumb]");
+function renderThumbs() {
+  if (recording) return;
+  for (const thumb of thumbs) {
+    const look = presetLook(thumb.dataset.thumb, true);
+    renderer.setSize(192);
+    renderer.render({ ...look, ...(look.background === "light" ? { background: "none" } : {}), frame: 1, shadow: 0 }, 0);
+    const ctx = thumb.getContext("2d");
+    ctx.clearRect(0, 0, thumb.width, thumb.height);
+    ctx.drawImage(canvas, 0, 0, thumb.width, thumb.height);
+  }
+  draw();
+}
+
 const PRESET_KEYS = new Set(Object.values(PRESETS).flatMap((p) => [...Object.keys(p.ranges), ...Object.keys(p.radios), ...Object.keys(p.checks)]));
 let applyingPreset = false;
 

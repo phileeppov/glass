@@ -716,6 +716,34 @@ button:disabled {
     background-size: 100% 100%, auto;
   }
 }
+/* Each preset key shows your own logo in that look: a small glass over the name. */
+.presets span {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  padding-block: 6px 5px;
+  font-size: 11px;
+}
+.presets canvas {
+  width: 40px;
+  height: 40px;
+  border-radius: 24%; /* hides the dark corners of the Night key */
+}
+/* The glass stays at full strength on every key; only the names of the unselected ones dim. */
+.presets span {
+  opacity: 1;
+  color: color-mix(in srgb, var(--ink) 60%, transparent);
+}
+.presets input:checked + span {
+  color: var(--ink);
+}
+/* A taller tray: softer corners instead of a pill, or the selection turns into an oval. */
+.presets .seg {
+  border-radius: 22px;
+}
+.presets .seg::before {
+  border-radius: 19px;
+}
 /* Five presets and four image formats share a tray: the labels go edge to edge and never wrap. */
 .presets span,
 .formats span {
