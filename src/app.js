@@ -308,6 +308,8 @@ function target(st) {
     depth: st.depth,
     background: st.background,
     bg: st.bg,
+    frame: ICON_SCALE, // share of the frame the icon takes; trying Avatar or App Store on hover eases it to 1
+    shadow: 1,
   };
 }
 
@@ -320,7 +322,7 @@ function withTurn(p, phase) {
 // Easing: each on-screen value chases its target with time constant EASE,
 // so the glass flows from square to circle and from one set of sides to another instead of jumping.
 const EASE = 90; // ms
-const EASED = ["n", "refraction", "dispersion", "edge", "motion", "size", "tintMix", "sideMix", "sideTwo", "angle", "spread", "liquid", "volume", "depth"];
+const EASED = ["n", "refraction", "dispersion", "edge", "motion", "size", "tintMix", "sideMix", "sideTwo", "angle", "spread", "liquid", "volume", "depth", "frame", "shadow"];
 let shown = null;
 
 function ease(goal, dt) {
@@ -436,12 +438,21 @@ function loop(now) {
   frame = 0;
   if (recording) return;
   const dt = Math.min(now - last, 100);
-  const moving = ease(target(params), dt);
+  const moving = ease(goal(), dt);
   const hearing = listen(now, dt);
   const leaning = lean(dt);
   last = now;
   draw();
   if (moving || animated() || hearing || leaning) frame = requestAnimationFrame(loop);
+}
+
+// What the stage eases toward: the settings, or what the mouse is trying on (see "Try on hover").
+function goal() {
+  if (trying?.preset) return presetLook(trying.preset);
+  const look = target(params);
+  if (trying?.format === "avatar") return { ...look, n: 2, frame: 1, shadow: 0 };
+  if (trying?.format === "store") return { ...look, frame: 1, shadow: 0 };
+  return look;
 }
 
 // Start redrawing if the loop is idle.
@@ -926,6 +937,27 @@ function randomize() {
 }
 
 for (const button of root.querySelectorAll("[data-random]")) button.addEventListener("click", randomize);
+
+// --- Try on hover ---
+
+// With a mouse, hovering a preset key shows that look on the stage, and hovering Avatar or App Store shows that framing:
+// the glass eases there and back when the mouse leaves. Nothing is selected until a click. Touch screens skip it.
+let trying = null; // { preset } or { format }
+if (matchMedia("(hover: hover) and (pointer: fine)").matches) {
+  for (const input of root.querySelectorAll("input[name=preset], input[name=image]")) {
+    const key = input.parentElement;
+    key.addEventListener("pointerenter", () => {
+      if (input.checked || recording) return;
+      trying = input.name === "preset" ? { preset: input.value } : { format: input.value };
+      kick();
+    });
+    key.addEventListener("pointerleave", () => {
+      trying = null;
+      kick();
+    });
+    input.addEventListener("change", () => (trying = null));
+  }
+}
 
 // --- Link to a look ---
 
