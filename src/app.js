@@ -25,6 +25,7 @@ const videoButton = root.querySelector("[data-video]");
 const status = root.querySelector("[data-status]");
 const shareButton = root.querySelector("[data-share]");
 const trackInput = root.querySelector("[data-track]");
+const textInput = root.querySelector("[data-text]");
 const caption = root.querySelector("[data-caption]");
 
 const tokens = getComputedStyle(document.documentElement);
@@ -81,6 +82,8 @@ try {
 async function loadFile(file) {
   if (recording) return; // the logo doesn't change mid-recording
   if (isAudio(file)) return void setSound("track", file); // a song dropped or pasted on the page plays as the track
+  textInput.value = "";
+  textTurn++; // a word still loading must not replace the file
   if (autoColor) setColor("original");
   if (file.type === "image/svg+xml" || file.name.toLowerCase().endsWith(".svg")) {
     await loadSvg(await file.text());
@@ -150,11 +153,49 @@ async function loadUrl(url) {
   kick();
 }
 
+// Typed text or an emoji becomes the logo through the same distance field as an upload:
+// letters in Onest, the page's font, emoji in the system's color emoji font.
+const TEXT_FONT = `600 400px Onest, "Helvetica Neue", Arial, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif`;
+let textTurn = 0;
+
+async function loadText(text) {
+  if (recording) return;
+  const turn = ++textTurn;
+  if (autoColor) setColor("original");
+  if (!text) return loadSvg(DEMO_SVG); // an empty field brings back the ☺
+  try {
+    await document.fonts.load(TEXT_FONT, text);
+  } catch {
+    // Onest didn't load: the fallback font draws it.
+  }
+  if (turn !== textTurn) return; // typed on since
+  const c = document.createElement("canvas");
+  const ctx = c.getContext("2d");
+  ctx.font = TEXT_FONT;
+  c.width = Math.ceil(ctx.measureText(text).width + 240);
+  c.height = 720;
+  ctx.font = TEXT_FONT; // resizing the canvas resets its state
+  if ("letterSpacing" in ctx) ctx.letterSpacing = "-16px"; // the page's −4% tracking at 400 px
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = "#0a0a0a";
+  ctx.fillText(text, c.width / 2, c.height / 2);
+  buildLogo(c, trim(c));
+  say("");
+  fitColorToBackground();
+  applyColor();
+  draw();
+  kick();
+}
+
 // Trim empty margins around the logo: the effect only shows when the artwork reaches the rim.
 function trim(img) {
-  const k = Math.min(1, 1024 / Math.max(img.naturalWidth, img.naturalHeight));
-  const w = Math.max(1, Math.round(img.naturalWidth * k));
-  const h = Math.max(1, Math.round(img.naturalHeight * k));
+  // An <img> has natural size; a canvas with typed text only has its own.
+  const iw = img.naturalWidth || img.width;
+  const ih = img.naturalHeight || img.height;
+  const k = Math.min(1, 1024 / Math.max(iw, ih));
+  const w = Math.max(1, Math.round(iw * k));
+  const h = Math.max(1, Math.round(ih * k));
   const data = pixels(w, h, (ctx) => ctx.drawImage(img, 0, 0, w, h));
   let x0 = w, y0 = h, x1 = -1, y1 = -1;
   for (let y = 0; y < h; y++) {
@@ -167,7 +208,7 @@ function trim(img) {
       }
     }
   }
-  if (x1 < 0) return { x: 0, y: 0, w: img.naturalWidth, h: img.naturalHeight };
+  if (x1 < 0) return { x: 0, y: 0, w: iw, h: ih };
   return { x: x0 / k, y: y0 / k, w: (x1 - x0 + 1) / k, h: (y1 - y0 + 1) / k };
 }
 
@@ -472,6 +513,20 @@ fileInput.addEventListener("change", () => {
   fileInput.value = "";
 });
 
+// Typing redraws after a short pause; the sample marks fill the field and load at once.
+let textTimer = 0;
+textInput.addEventListener("input", () => {
+  clearTimeout(textTimer);
+  textTimer = setTimeout(() => loadText(textInput.value.trim()), 180);
+});
+for (const sample of root.querySelectorAll("[data-sample]")) {
+  sample.addEventListener("click", () => {
+    clearTimeout(textTimer);
+    textInput.value = sample.dataset.sample;
+    loadText(sample.dataset.sample);
+  });
+}
+
 // A file can be dropped anywhere on the page; while it's being dragged, the stage is highlighted.
 let dragDepth = 0;
 document.addEventListener("dragenter", (e) => {
@@ -679,10 +734,17 @@ document.addEventListener("paste", (e) => {
   const data = e.clipboardData;
   if (!data) return;
   const file = [...data.files].find((f) => f.type.startsWith("image/"));
-  if (file) return void loadFile(file);
+  // An image or SVG code is the logo, not text for the field, even if the field has focus.
+  if (file) {
+    e.preventDefault();
+    return void loadFile(file);
+  }
   const text = data.getData("text/plain").trim();
   if (recording) return;
   if (text.startsWith("<svg") || text.startsWith("<?xml")) {
+    e.preventDefault();
+    textInput.value = "";
+    textTurn++;
     if (autoColor) setColor("original");
     loadSvg(text);
   }
