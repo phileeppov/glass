@@ -69,6 +69,19 @@
             <label><input type="radio" name="background" value="none" /><span>None</span></label>
           </div>
         </fieldset>
+
+        <h2 class="group" data-sound-head>Sound <span class="new" data-new="sound" hidden>New</span></h2>
+        <fieldset>
+          <legend class="sr">Sound</legend>
+          <div class="seg">
+            <label><input type="radio" name="sound" value="off" checked /><span>Off</span></label>
+            <label><input type="radio" name="sound" value="demo" /><span>Demo</span></label>
+            <label><input type="radio" name="sound" value="mic" /><span>Mic</span></label>
+            <label><input type="radio" name="sound" value="track" /><span>Track</span></label>
+          </div>
+        </fieldset>
+        <input type="file" class="track-input" accept="audio/*,.mp3,.m4a,.aac,.wav,.ogg,.flac" data-track tabindex="-1" aria-label="Pick a track" />
+
         <details class="advanced" data-advanced>
           <summary>Advanced</summary>
           <div class="adv-body">
@@ -103,38 +116,24 @@
                 <label><input type="radio" name="color" value="white" /><span>White</span></label>
               </div>
             </fieldset>
+            <fieldset class="formats">
+              <legend>Image <span class="new" data-new="image" hidden>New</span></legend>
+              <div class="seg">
+                <label><input type="radio" name="image" value="icon" checked /><span>1024</span></label>
+                <label><input type="radio" name="image" value="large" /><span>2048</span></label>
+                <label><input type="radio" name="image" value="avatar" /><span>Avatar</span></label>
+                <label><input type="radio" name="image" value="store" /><span>App Store</span></label>
+              </div>
+            </fieldset>
+            <fieldset>
+              <legend>Video</legend>
+              <div class="seg">
+                <label><input type="radio" name="format" value="square" checked /><span>Square</span></label>
+                <label><input type="radio" name="format" value="wide" /><span>Wide 16:9</span></label>
+              </div>
+            </fieldset>
           </div>
         </details>
-
-        <h2 class="group" data-sound-head>Sound <span class="new" data-new="sound" hidden>New</span></h2>
-        <fieldset>
-          <legend class="sr">Sound</legend>
-          <div class="seg">
-            <label><input type="radio" name="sound" value="off" checked /><span>Off</span></label>
-            <label><input type="radio" name="sound" value="demo" /><span>Demo</span></label>
-            <label><input type="radio" name="sound" value="mic" /><span>Mic</span></label>
-            <label><input type="radio" name="sound" value="track" /><span>Track</span></label>
-          </div>
-        </fieldset>
-        <input type="file" class="track-input" accept="audio/*,.mp3,.m4a,.aac,.wav,.ogg,.flac" data-track tabindex="-1" aria-label="Pick a track" />
-
-        <h2 class="group">Export</h2>
-        <fieldset class="formats">
-          <legend>Image <span class="new" data-new="image" hidden>New</span></legend>
-          <div class="seg">
-            <label><input type="radio" name="image" value="icon" checked /><span>1024</span></label>
-            <label><input type="radio" name="image" value="large" /><span>2048</span></label>
-            <label><input type="radio" name="image" value="avatar" /><span>Avatar</span></label>
-            <label><input type="radio" name="image" value="store" /><span>App Store</span></label>
-          </div>
-        </fieldset>
-        <fieldset>
-          <legend>Video</legend>
-          <div class="seg">
-            <label><input type="radio" name="format" value="square" checked /><span>Square</span></label>
-            <label><input type="radio" name="format" value="wide" /><span>Wide 16:9</span></label>
-          </div>
-        </fieldset>
 
         <!-- On a phone this block docks at the bottom of the screen, under the thumb: download is on the first screen. -->
         <div class="dock">

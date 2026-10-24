@@ -813,6 +813,11 @@ button:disabled {
 .glass {
   interpolate-size: allow-keywords;
 }
+/* Advanced closes the panel, under a hairline like the groups: the finer look settings, then the PNG and video formats. */
+.advanced {
+  padding-top: 10px;
+  border-top: 0.5px solid color-mix(in srgb, var(--color-black) 10%, transparent);
+}
 .advanced summary {
   display: flex;
   justify-content: space-between;
