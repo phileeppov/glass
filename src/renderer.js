@@ -81,7 +81,7 @@ uniform float u_volume;     // slab thickness, 0..1
 uniform float u_depth;      // 0: flat glass, 1: with volume; continuous so the volume fades out instead of popping off
 uniform vec3 u_bg;
 uniform float u_mode;       // 0 light, 1 dark, 2 transparent
-uniform vec4 u_sound;       // x loudness, y bass, z beat; all 0 when sound is off, and then nothing below changes
+uniform vec4 u_sound;       // x loudness, y bass; all 0 when sound is off, and then nothing below changes
 uniform vec4 u_ring;        // beat ripples: x age (s) and y strength of the newest, zw of the one before
 uniform float u_bands[8];   // sound by frequency, low to high, 0..1; laid along the fringe from red to violet
 uniform vec4 u_drops[4];    // small ripples: xy center, z age (s), w strength
@@ -187,8 +187,8 @@ vec2 waves(vec2 p, float T) {
 // A ripple from the center on a beat: a crest that runs out along scaled-down copies of the shape and fades.
 // rr is the superellipse norm (0 center, 1 rim), r is age and strength. Positive pushes outward, negative inward.
 float ring(float rr, vec2 r) {
-  float x = (rr - r.x * 1.9) / 0.075;
-  return x * exp(-x * x) * r.y * exp(-2.5 * r.x);
+  float x = (rr - r.x * 1.9) / 0.045;
+  return x * exp(-x * x) * r.y * exp(-5.0 * r.x);
 }
 
 // A drop: a small round ripple from d.xy, quicker and shorter-lived than the beat ring, like rain on glass.
@@ -210,8 +210,8 @@ void main() {
   float T = u_phase * TAU;
   vec2 p = (v_uv - 0.5) * 2.0 / ${ICON_SCALE.toFixed(2)};
   p *= u_zoom;
-  // Bass pumps the whole icon a little, like a speaker cone.
-  p *= 1.0 - 0.012 * u_motion * sin(T) - 0.025 * u_sound.y;
+  // Bass lifts the whole icon by a hair, a breath rather than a pump.
+  p *= 1.0 - 0.012 * u_motion * sin(T) - 0.006 * u_sound.y;
 
   vec2 nrm;
   float d = shape(p, nrm);
@@ -262,31 +262,30 @@ void main() {
   // Waves in the glass: the smear thickness varies along the rim. None in the center, so the glyph stays even there.
   vec2 wv = waves(p, T);
   float nearEdge = 1.0 - smoothstep(0.0, 0.6, depth);
-  // Loudness swells the waves on top of Blend.
-  float swell = 1.0 + 0.45 * u_liquid * wv.x * nearEdge + 0.45 * u_sound.x * wv.x * nearEdge;
+  // Loudness swells the waves on top of Blend, just enough to see.
+  float swell = 1.0 + 0.45 * u_liquid * wv.x * nearEdge + 0.12 * u_sound.x * wv.x * nearEdge;
   // A corner is farther from the center than a side's midpoint, so the ray reaches farther, or the corner runs short of glyph.
   float cornerReach = length(p) / max(snorm(p), 1e-3);
   // The band at the rim stays (long tails along the sides); the bridge to the glyph is added on top.
   float k = u_refract * 0.42 * wave * swell * cornerReach * max(rimPull, flow * u_liquid) * side;
   // Color spread is capped: otherwise, at large offsets the fringe smears into wide blotches.
-  // A beat lifts the cap for a moment: a flash of rainbow.
-  float kDisp = min(k, 0.16 + 0.14 * u_sound.z);
+  float kDisp = min(k, 0.16);
   // Sample direction: along the normal; with Liquid it converges toward the center, and the tails pool into the corner.
   vec2 dir = normalize(mix(nrm, p / max(length(p), 1e-3), 0.45 * u_liquid));
   // The sound terms are separate additions, not folded into the old ones: with sound off they add exactly 0.
-  vec2 ripple = wv * 0.05 * u_liquid * nearEdge * side + wv * 0.04 * u_sound.x * nearEdge * side;
+  vec2 ripple = wv * 0.05 * u_liquid * nearEdge * side + wv * 0.012 * u_sound.x * nearEdge * side;
   // Beat ripples bend whatever they pass over, the glyph too; the colors split on them below.
   float rr = 1.0 - depth + wob;
   // The light follows the lean; the logo under the glass shifts the other way, more under a thicker slab: parallax.
   vec2 L = normalize(vec2(-0.55, 0.85) + u_tilt * 0.9);
   vec2 par = -u_tilt * (0.03 + 0.12 * u_volume * u_depth);
   float beatRing = ring(rr, u_ring.xy) + ring(rr, u_ring.zw);
-  vec2 wake = nrm * beatRing * 0.07;
+  vec2 wake = nrm * beatRing * 0.035;
   float ripGlint = beatRing * dot(nrm, L);
   for (int j = 0; j < 4; j++) {
     vec3 dj = drop(p, u_drops[j], L);
-    wake += dj.xy * 0.05;
-    ripGlint += dj.z * 0.8;
+    wake += dj.xy * 0.025;
+    ripGlint += dj.z * 0.35;
   }
 
   // Volume: a slab with a rounded rim. Thickness sets its visible width and depth,
@@ -334,15 +333,15 @@ void main() {
     float jitter = ign(gl_FragCoord.xy);
     for (int i = 0; i < TAPS; i++) {
       float x = (float(i) + jitter) / float(TAPS);
-      // Sound as light: each color listens to its own band, bass in red through highs in violet.
-      // A loud band bends its color further and weighs it more, so the fringe splits the music the way it splits light.
+      // Sound as light: each colour of the rim fringe listens to its own band, bass in red through highs in violet.
+      // A loud band leans its colour a little further and a little stronger; the fringe stays a thin rim.
       float tone = u_bands[i / 4];
-      vec3 w = spectrum(x) * (1.0 + 2.0 * tone);
+      vec3 w = spectrum(x) * (1.0 + 0.6 * tone);
       // Red goes deeper, blue stays closer to the edge: red fringe outside, cyan inside.
       // A small spread along the rim softens hard cuts in the glyph.
       float along = (fract(x * 7.31 + jitter) - 0.5) * 0.25;
-      float spread = (0.5 - x) * order * (1.0 + 0.8 * u_sound.z + 1.8 * tone);
-      vec2 off = -dir * (k + kDisp * u_disp * spread * 0.9) + ripple + wake * (1.0 + u_disp * spread * 1.2);
+      float spread = (0.5 - x) * order * (1.0 + 0.5 * tone);
+      vec2 off = -dir * (k + kDisp * u_disp * spread * 0.9) + ripple + wake;
       vec4 c;
       if (vol) {
         off += throughSlab(n3, ior + u_disp * 0.3 * spread, h) * side * wave * u_depth;
@@ -363,7 +362,7 @@ void main() {
   }
 
   // Ripple crests catch the light on one side and shade the other.
-  if (ripGlint != 0.0) inside.rgb = clamp(inside.rgb + inside.a * 0.4 * ripGlint, 0.0, inside.a);
+  if (ripGlint != 0.0) inside.rgb = clamp(inside.rgb + inside.a * 0.25 * ripGlint, 0.0, inside.a);
   float lit = 0.55 + 0.45 * dot(nrm, L);
   // A thin glint right at the edge; photographed glass always has one.
   float glint = exp(-sq((-d - 0.012) / (2.0 * px)));

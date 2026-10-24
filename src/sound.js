@@ -11,8 +11,8 @@ const FFT = 2048;
 export const BANDS = 8;
 const EDGES = Array.from({ length: BANDS + 1 }, (_, i) => 40 * 300 ** (i / BANDS));
 const RINGS = 2; // beat ripples alive at once
-const DROPS = 4; // spark drops alive at once
-const RING_AT = 0.6; // beat strength that sends a ripple from the center
+const DROPS = 2; // spark drops alive at once
+const RING_AT = 0.75; // beat strength that sends a ripple from the center: the strong ones only
 
 // Peak picking on an onset curve: fires just past the top of a rise well above the recent mean,
 // with strength against the recent strongest onset.
@@ -286,18 +286,19 @@ export class Sound {
     if (reading && this.mode === "demo") reading = { ...reading, ...this.score() };
     const { level = 0, bass = 0, bands = null, beat = 0, spark = 0 } = reading ?? {};
 
-    this.level = follow(this.level, level, dt, 0.02, 0.25);
-    this.bass = follow(this.bass, bass, dt, 0.012, 0.18);
+    // Soft release everywhere: glass settles, it doesn't snap back.
+    this.level = follow(this.level, level, dt, 0.03, 0.45);
+    this.bass = follow(this.bass, bass, dt, 0.02, 0.35);
     let loud = this.level + this.bass;
     for (let b = 0; b < BANDS; b++) {
       this.bands[b] = follow(this.bands[b], bands ? bands[b] : 0, dt, 0.01, 0.16);
       loud += this.bands[b];
     }
-    this.hit = Math.max(this.hit * Math.exp(-dt / 0.22), beat);
+    this.hit = Math.max(this.hit * Math.exp(-dt / 0.35), beat);
     // Only strong beats send a ripple from the center; one on every hat would blur into noise.
     if (beat > RING_AT) this.rings = [{ age: 0, amp: beat }, ...this.rings].slice(0, RINGS);
     // A hat, a snare or a click near the mic drops a small ripple somewhere in the glass, like rain.
-    if (spark > 0.4 && this.beats.since > 0.06) {
+    if (spark > 0.65 && this.beats.since > 0.06) {
       const a = Math.random() * Math.PI * 2;
       const r = 0.72 * Math.sqrt(Math.random());
       this.drops = [{ x: r * Math.cos(a), y: r * Math.sin(a), age: 0, amp: spark }, ...this.drops].slice(0, DROPS);

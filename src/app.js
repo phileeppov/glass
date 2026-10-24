@@ -350,9 +350,9 @@ function previewSize() {
   return Math.min(Math.round(css * Math.min(devicePixelRatio, 2)), 1400);
 }
 
-// Sound on top of the settings: bass swells the glass and rocks the rim, a beat flashes refraction and rainbow;
-// the shader splits the bands along the fringe, swells the waves, pumps the icon and runs the ripples.
-// With reduced motion the ripples stay off. Silent: the same object, nothing changes.
+// Sound on top of the settings, kept to the restraint of the still glass. A beat has one accent: the refraction
+// leans in and eases back. Bass thickens the slab a touch; the shader tints the rim fringe by band, breathes the waves
+// and runs a thin ripple. With reduced motion the ripples stay off. Silent: the same object, nothing changes.
 function live(p) {
   const { level, bass, hit, bands } = sound;
   const rings = reducedMotion ? [] : sound.rings;
@@ -361,10 +361,8 @@ function live(p) {
   const [a, b] = rings;
   return {
     ...p,
-    motion: p.motion + 0.4 * bass,
-    volume: p.volume + 0.3 * bass,
-    refraction: p.refraction + 0.6 * hit,
-    dispersion: p.dispersion + 0.3 * hit,
+    volume: p.volume + 0.1 * bass,
+    refraction: p.refraction + 0.35 * hit,
     sound: [level, bass, hit, 0],
     ring: [a?.age ?? 0, a?.amp ?? 0, b?.age ?? 0, b?.amp ?? 0],
     bands,
@@ -410,7 +408,7 @@ function feel(p) {
   return out;
 }
 
-// One sound step. With sound on, the loop clock runs faster when it's loud, so the waves rush with the music.
+// One sound step. With sound on, the loop clock runs a little faster when it's loud, so the waves move with the music.
 // The phase is handed over both ways, so turning sound on or off doesn't make the glass jump.
 function listen(now, dt) {
   const on = sound.mode !== "off";
@@ -421,7 +419,7 @@ function listen(now, dt) {
   }
   const alive = sound.update(dt);
   showBars();
-  if (soundOn) clock = (clock + (dt / PERIOD) * (1 + 1.5 * sound.level)) % 1;
+  if (soundOn) clock = (clock + (dt / PERIOD) * (1 + 0.4 * sound.level)) % 1;
   return alive;
 }
 
