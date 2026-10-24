@@ -925,6 +925,10 @@ button:disabled {
 }
 
 @media (max-width: 760px) {
+  /* Dropping and pasting are desktop gestures; on a phone the hint only takes room from the glass. */
+  .drop-hint {
+    display: none;
+  }
   /* On a phone the dock is under the thumb: Download PNG and Record video side by side, tighter. */
   .dock {
     gap: 8px;
