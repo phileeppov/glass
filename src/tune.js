@@ -20,6 +20,8 @@ const GLASS = [
 const TOCK = [[1, 1, 0.03], [1.73, 0.6, 0.02]];
 const TICK = [[1, 1, 0.018], [1.47, 0.6, 0.012]];
 const CLINK = [[1, 1, 0.12], [1.71, 0.7, 0.09], [2.63, 0.4, 0.06]];
+// The touch chime: the same glass with its bright upper partials taken out, so a tap rings soft, not sharp.
+const SOFT = [[1, 1, 1.1], [2, 0.22, 0.6], [3.01, 0.05, 0.35]];
 
 // A minor, F, C, G: one chord per bar.
 const CHORDS = [[9, 0, 4], [5, 9, 0], [0, 4, 7], [7, 11, 2]];
@@ -147,5 +149,5 @@ const CHIME = [81, 84, 86, 88, 91, 93];
 let chimeStep = 0;
 export function chime(ctx, out) {
   chimeStep = (chimeStep + 1 + Math.floor(Math.random() * 2)) % CHIME.length;
-  strike(ctx, out, ctx.currentTime + 0.01, hz(CHIME[chimeStep]), 0.07);
+  strike(ctx, out, ctx.currentTime + 0.01, hz(CHIME[chimeStep]), 0.045, SOFT);
 }

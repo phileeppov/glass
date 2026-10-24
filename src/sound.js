@@ -111,9 +111,9 @@ export class Sound {
     track.connect(ctx.destination);
     track.connect(this.out);
 
-    // The demo tune plays quietly: it's a first taste, not a soundtrack.
+    // The demo tune plays quietly, about 7 dB under the tune itself: a first taste, not a soundtrack.
     this.demoBus = ctx.createGain();
-    this.demoBus.gain.value = 0.6;
+    this.demoBus.gain.value = 0.42;
     this.demoBus.connect(this.analyser);
     this.demoBus.connect(ctx.destination);
     this.demoBus.connect(this.out);
