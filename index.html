@@ -35,7 +35,7 @@
         <div class="type">
           <span class="new" data-new="text" hidden>New</span>
           <input type="text" name="text" maxlength="12" placeholder="Or type a letter, word or emoji" enterkeyhint="done" spellcheck="false" aria-label="Type a letter, word or emoji" data-text />
-          <div class="samples" aria-label="Try one">
+          <div class="samples" role="group" aria-label="Try one">
             <button type="button" data-sample="">☺</button>
             <button type="button" data-sample="A">A</button>
             <button type="button" data-sample="hi">hi</button>
@@ -88,7 +88,7 @@
             <label><input type="radio" name="sound" value="track" /><span>Track</span></label>
           </div>
         </fieldset>
-        <input type="file" class="track-input" accept="audio/*,.mp3,.m4a,.aac,.wav,.ogg,.flac" data-track aria-label="Pick a track" />
+        <input type="file" class="track-input" accept="audio/*,.mp3,.m4a,.aac,.wav,.ogg,.flac" data-track tabindex="-1" aria-label="Pick a track" />
 
         <details class="advanced" data-advanced>
           <summary>Advanced</summary>

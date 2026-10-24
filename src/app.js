@@ -604,7 +604,7 @@ function showSound(mode) {
 // one round of the tune, or a stretch of your own sound.
 function showCaption() {
   const mode = root.querySelector("input[name=sound]:checked")?.value ?? "off";
-  const video = mode === "off" ? "MP4 1080p, 4 s" : mode === "demo" ? "MP4 1080p, 10 s with the tune" : "MP4 1080p, 12 s with sound";
+  const video = mode === "off" ? "MP4 1080p, 4 s" : mode === "demo" ? "MP4 1080p, 9.6 s with sound" : "MP4 1080p, 12 s with sound";
   const own = mode === "mic" || mode === "track" ? "Your logo and sound never leave your browser." : "Your logo never leaves your browser.";
   caption.textContent = `${imageFormat().note} · ${video} · ${own}`;
 }
@@ -638,7 +638,7 @@ async function setSound(mode, file) {
 function soundError(mode, e) {
   const name = e?.name ?? "";
   if (mode === "mic") {
-    if (e?.message === "insecure") return "The mic only works on a secure (https) page.";
+    if (e?.message === "insecure") return isSecureContext ? "This browser can't use the mic. Try Chrome or Safari." : "The mic only works on a secure (https) page.";
     if (name === "NotAllowedError" || name === "SecurityError") return "Mic access is blocked. Allow it for this page and try again.";
     if (name === "NotFoundError" || name === "OverconstrainedError") return "No mic found.";
     if (name === "NotReadableError") return "The mic is busy in another app.";
@@ -728,22 +728,31 @@ tiltButton.addEventListener("click", async () => {
     tiltButton.hidden = true;
     tried("tilt");
   } catch {
-    say("Motion access is off. Allow it for this site in Safari settings to tilt the glass.");
+    say("Motion access is off, so the glass won't tilt.");
   }
 });
 
-// A tap on the glass: a ripple from that spot and a quiet glass note. The note stays out of the way while sound is on.
+// A tap on the glass: a ripple from that spot on the press, and a quiet glass note on the release.
+// The note waits for the release because iPhone only lets audio start there, and a touch that turns into
+// a scroll never releases on the canvas, so scrolling past the icon stays silent. Not while sound is on.
+let pressed = false;
 canvas.addEventListener("pointerdown", (e) => {
+  pressed = false;
   if (recording) return;
   const r = canvas.getBoundingClientRect();
   const x = (((e.clientX - r.left) / r.width - 0.5) * 2) / ICON_SCALE;
   const y = (-((e.clientY - r.top) / r.height - 0.5) * 2) / ICON_SCALE;
   if (Math.hypot(x, y) > 1.3) return; // the shadow and the margin, not the glass
-  sound.chime();
+  pressed = true;
   if (reducedMotion) return;
   touches = [{ x, y, age: 0, amp: 1.6 }, ...touches].slice(0, 4);
   kick();
 });
+canvas.addEventListener("pointerup", () => {
+  if (pressed) sound.chime();
+  pressed = false;
+});
+canvas.addEventListener("pointercancel", () => (pressed = false));
 
 // --- Presets ---
 
@@ -982,7 +991,7 @@ function frameInto(out, p, phase, opaque = false) {
 const IMAGES = {
   icon: { px: EXPORT_PX, name: "glass-icon.png", note: "PNG 1024 px" },
   large: { px: 2048, name: "glass-icon-2048.png", note: "PNG 2048 px" },
-  avatar: { px: 1024, name: "glass-avatar.png", note: "Round PNG 1024 px", fill: true, shape: "circle" },
+  avatar: { px: 1024, name: "glass-avatar.png", note: "Avatar PNG 1024 px", fill: true, shape: "circle" },
   store: { px: 1024, name: "glass-app-store.png", note: "App Store PNG 1024 px", fill: true, opaque: true },
 };
 const imageFormat = () => IMAGES[root.querySelector("input[name=image]:checked")?.value] ?? IMAGES.icon;
@@ -1112,6 +1121,8 @@ videoButton.addEventListener("click", async () => {
 
     // In Demo the video is one round of the tune from its first beat, so the first second already moves.
     if (demo) await sound.rewind();
+    // A track whose autoplay was refused would record silence; this tap counts as the one it waited for.
+    if (sound.mode === "track" && sound.audio.paused) await sound.audio.play().catch(() => {});
     recorder.start();
     const start = performance.now();
     let prev = start;
