@@ -1378,8 +1378,11 @@ function hexToRgb(hex) {
 
 // --- New ---
 
-// "New" tags over what this release added. A tag goes once you've tried that feature (remembered in this browser only),
-// and all of them go on NEW_UNTIL. They are temporary, so they have a date: two weeks after launch.
+// What this release added, said quietly, in one of two forms (NEW_STYLE):
+// "dots": a small dot by each new feature, gone once you've tried it (remembered in this browser only);
+// "line": one line under the title on the first visit only, naming what's new; no dots.
+// Either way everything goes on NEW_UNTIL: temporary, so it has a date, two weeks after launch.
+const NEW_STYLE = "dots";
 const NEW_UNTIL = Date.parse("2026-11-15"); // set to the launch day plus 14 days when the launch date is known
 let seen = [];
 try {
@@ -1388,17 +1391,26 @@ try {
   // Storage unavailable: the tags just show until the date.
 }
 
-// The line under the title names what is still untried here; it shortens as you try things and goes when nothing is left.
+// The first visit is the one without the mark; the mark is set right away, so a reload no longer shows the line.
+let firstVisit = true;
+try {
+  firstVisit = !localStorage.getItem("glass-new-seen");
+  localStorage.setItem("glass-new-seen", "1");
+} catch {
+  // Storage unavailable: every visit counts as the first, and the line shows until the date.
+}
+
+// The line names what is still untried; it shortens as you try things and goes when nothing is left.
 const NEW_NAMES = { sound: "sound", text: "typed logos", random: "Randomize", image: "PNG formats", tilt: "tilt" };
 const whatsNew = document.querySelector("[data-whatsnew]");
 
 function showNew() {
   const over = Date.now() > NEW_UNTIL;
-  for (const tag of root.querySelectorAll("[data-new]")) tag.hidden = over || seen.includes(tag.dataset.new);
+  for (const tag of root.querySelectorAll("[data-new]")) tag.hidden = over || NEW_STYLE !== "dots" || seen.includes(tag.dataset.new);
   // In NEW_NAMES order, sound first. Tilt only counts where its button shows (iPhone); elsewhere the glass just follows the cursor.
   const left = Object.keys(NEW_NAMES).filter((k) => !over && !seen.includes(k) && (k !== "tilt" || !tiltButton.hidden)).map((k) => NEW_NAMES[k]);
   whatsNew.textContent = `New: ${left.join(", ")}`;
-  whatsNew.hidden = !left.length;
+  whatsNew.hidden = NEW_STYLE !== "line" || !firstVisit || !left.length;
 }
 
 function tried(feature) {
