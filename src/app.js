@@ -668,8 +668,10 @@ let applyingPreset = false;
 
 // A preset writes values into the inputs themselves, so the glass eases to it the same way as with the sliders.
 function applyPreset(name) {
-  const preset = PRESETS[name];
-  if (!preset) return;
+  if (PRESETS[name]) applyLook(PRESETS[name]);
+}
+
+function applyLook(preset) {
   applyingPreset = true;
   for (const [key, on] of Object.entries(preset.checks)) {
     const el = root.querySelector(`input[name=${key}]`);
@@ -700,6 +702,41 @@ for (const input of root.querySelectorAll("input[name=preset]")) {
     applyPreset(input.value);
   });
 }
+
+// Randomize: a look of its own, mixed within the ranges the presets live in, so it never comes out broken.
+// It eases in like a preset; no preset stays selected, since the look is custom.
+const pick = (a, b) => a + Math.random() * (b - a);
+const chance = (p) => Math.random() < p;
+
+function randomLook() {
+  const sides = chance(0.5) ? "all" : chance(0.7) ? "two" : "one";
+  const pooled = chance(0.3); // a third of looks keep the logo whole, with only a rainbow rim
+  return {
+    ranges: {
+      size: pick(0.56, 0.7),
+      refraction: pick(0.8, 1.5),
+      dispersion: pick(0.75, 1),
+      edge: pick(0.12, 0.3),
+      liquid: pooled ? pick(0, 0.2) : pick(0.5, 0.9),
+      angle: pick(0, 360),
+      spread: pick(0.3, 0.85),
+      thickness: pick(0.3, 0.7),
+      motion: pick(0.35, 0.7),
+    },
+    radios: { sides, background: chance(0.65) ? "light" : "dark", shape: chance(0.8) ? "squircle" : "circle" },
+    checks: { volume: chance(0.85), spin: sides !== "all" && chance(0.15) },
+  };
+}
+
+let rolls = 0;
+function randomize() {
+  applyLook(randomLook());
+  for (const input of root.querySelectorAll("input[name=preset]")) input.checked = false;
+  rolls++;
+  for (const button of root.querySelectorAll("[data-random]")) button.style.setProperty("--turn", `${rolls * 120}deg`);
+}
+
+for (const button of root.querySelectorAll("[data-random]")) button.addEventListener("click", randomize);
 
 // Advanced remembers whether it's open, per visitor, in their own browser.
 const advanced = root.querySelector("[data-advanced]");
