@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Glass</title>
+    <meta name="description" content="Drop a logo, get it back as a glass app icon. Runs in your browser." />
+    <link rel="icon" type="image/png" sizes="64x64" href="favicon.png" />
+    <link rel="apple-touch-icon" href="touch-icon.png" />
+    <link rel="stylesheet" href="style.css" />
+    <script type="module" src="src/app.js"></script>
+  </head>
+  <body>
+    <main class="glass" data-glass data-sides="two" data-volume="on">
+      <div class="intro">
+        <h1>Glass</h1>
+        <p>Drop a logo, get it back in glass.</p>
+      </div>
+
+      <div class="stage-wrap">
+        <div class="stage-sticky">
+          <div class="stage" data-stage>
+            <canvas aria-label="Glass icon preview"></canvas>
+            <p class="unsupported">WebGL isn't working in this browser, so the glass can't render.</p>
+          </div>
+        </div>
+      </div>
+
+      <form class="controls" autocomplete="off" onsubmit="return false">
+        <label class="upload">
+          <span>Upload logo</span>
+          <input type="file" accept=".svg,image/svg+xml,image/png,image/jpeg,image/webp" />
+        </label>
+        <p class="hint">Or drop an SVG or PNG anywhere. From Figma: Copy as SVG, then paste.</p>
+
+        <fieldset class="presets">
+          <legend>Presets</legend>
+          <div class="seg">
+            <label><input type="radio" name="preset" value="studio" checked /><span>Studio</span></label>
+            <label><input type="radio" name="preset" value="melt" /><span>Melt</span></label>
+            <label><input type="radio" name="preset" value="prism" /><span>Prism</span></label>
+            <label><input type="radio" name="preset" value="lens" /><span>Lens</span></label>
+            <label><input type="radio" name="preset" value="night" /><span>Night</span></label>
+          </div>
+        </fieldset>
+
+        <label class="range"><input type="range" name="refraction" min="0" max="1.5" step="any" value="1.5" /><span class="thumb"><span class="name">Refraction</span><span class="val" aria-hidden="true"></span></span></label>
+        <label class="range"><input type="range" name="liquid" min="0" max="1" step="any" value="0.75" /><span class="thumb"><span class="name">Blend</span><span class="val" aria-hidden="true"></span></span></label>
+        <label class="range"><input type="range" name="size" min="0.3" max="1.2" step="any" value="0.66" /><span class="thumb"><span class="name">Logo size</span><span class="val" aria-hidden="true"></span></span></label>
+        <fieldset>
+          <legend>Background</legend>
+          <div class="seg">
+            <label><input type="radio" name="background" value="light" checked /><span>Light</span></label>
+            <label><input type="radio" name="background" value="dark" /><span>Dark</span></label>
+            <label><input type="radio" name="background" value="none" /><span>None</span></label>
+          </div>
+        </fieldset>
+
+        <details class="advanced" data-advanced>
+          <summary>Advanced</summary>
+          <div class="adv-body">
+            <label class="range"><input type="range" name="dispersion" min="0" max="1" step="any" value="0.95" /><span class="thumb"><span class="name">Dispersion</span><span class="val" aria-hidden="true"></span></span></label>
+            <label class="range"><input type="range" name="edge" min="0.06" max="0.35" step="any" value="0.18" /><span class="thumb"><span class="name">Edge width</span><span class="val" aria-hidden="true"></span></span></label>
+            <fieldset>
+              <legend>Edges</legend>
+              <div class="seg">
+                <label><input type="radio" name="sides" value="all" /><span>All</span></label>
+                <label><input type="radio" name="sides" value="two" checked /><span>Two</span></label>
+                <label><input type="radio" name="sides" value="one" /><span>One</span></label>
+              </div>
+            </fieldset>
+            <label class="range directional"><input type="range" name="angle" min="0" max="360" step="any" value="45" /><span class="thumb"><span class="name">Angle</span><span class="val" aria-hidden="true"></span></span></label>
+            <label class="range directional"><input type="range" name="spread" min="0" max="1" step="any" value="0.6" /><span class="thumb"><span class="name">Length</span><span class="val" aria-hidden="true"></span></span></label>
+            <label class="check directional"><input type="checkbox" name="spin" /><span>Spin</span></label>
+            <label class="range"><input type="range" name="motion" min="0" max="1" step="any" value="0.5" /><span class="thumb"><span class="name">Motion</span><span class="val" aria-hidden="true"></span></span></label>
+            <label class="check"><input type="checkbox" name="volume" checked /><span>Depth</span></label>
+            <label class="range thick"><input type="range" name="thickness" min="0.05" max="1" step="any" value="0.35" /><span class="thumb"><span class="name">Thickness</span><span class="val" aria-hidden="true"></span></span></label>
+            <fieldset>
+              <legend>Shape</legend>
+              <div class="seg">
+                <label><input type="radio" name="shape" value="squircle" checked /><span>Squircle</span></label>
+                <label><input type="radio" name="shape" value="circle" /><span>Circle</span></label>
+              </div>
+            </fieldset>
+            <fieldset>
+              <legend>Logo color</legend>
+              <div class="seg">
+                <label><input type="radio" name="color" value="original" checked /><span>Original</span></label>
+                <label><input type="radio" name="color" value="black" /><span>Black</span></label>
+                <label><input type="radio" name="color" value="white" /><span>White</span></label>
+              </div>
+            </fieldset>
+          </div>
+        </details>
+
+        <fieldset>
+          <legend>Video</legend>
+          <div class="seg">
+            <label><input type="radio" name="format" value="square" checked /><span>Square</span></label>
+            <label><input type="radio" name="format" value="wide" /><span>Wide 16:9</span></label>
+          </div>
+        </fieldset>
+
+        <div class="actions">
+          <button type="button" data-png>Download PNG</button>
+          <button type="button" data-video>Record video</button>
+        </div>
+        <button type="button" class="share" data-share hidden>Share it on X →</button>
+        <p class="status" data-status aria-live="polite"></p>
+        <p class="hint caption">PNG 1024 px · MP4 1080p, 4 s · Your logo never leaves your browser.</p>
+      </form>
+
+      <!-- The link opens in a new tab, so the uploaded logo and settings aren't lost. -->
+      <footer class="bottom">
+        <p class="made">Made by <a href="https://phileeppov.com/glass" target="_blank" rel="noopener">Nikita Filippov</a> ☺</p>
+      </footer>
+    </main>
+  </body>
+</html>

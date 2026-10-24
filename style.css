@@ -1,0 +1,670 @@
+/* Onest (OFL, Google Fonts). Files and license: fonts/. */
+@font-face {
+  font-family: "Onest";
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+  src: url(fonts/onest-latin-ext.woff2) format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: "Onest";
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+  src: url(fonts/onest-latin.woff2) format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* Page colors and type. src/app.js reads --color-black and --color-off-white for the light and dark backgrounds. */
+:root {
+  --color-black: #0a0a0a;
+  --color-off-white: #f2f2f0;
+  --font-base: "Helvetica Neue", Arial, system-ui, sans-serif;
+  --text-body: clamp(17px, 1.25vw, 18px);
+  --text-meta: 13px;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+/* All page text is Onest, tracking −4%. */
+html {
+  background: var(--color-off-white);
+  color: var(--color-black);
+  font-family: "Onest", var(--font-base);
+  font-size: var(--text-body);
+  letter-spacing: -0.04em;
+}
+body {
+  margin: 0;
+  padding: 20px 24px;
+}
+.bottom a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.glass {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  /* The stage spans two rows, next to the panel and the footer, so it keeps the icon centered on screen all the way down. */
+  grid-template-areas:
+    "stage intro"
+    "stage controls"
+    "stage foot";
+  gap: 24px 40px;
+  align-items: start;
+}
+/* Title above the panel, in the right column. */
+.intro {
+  grid-area: intro;
+  padding: 56px 4px 0;
+}
+h1 {
+  font-size: clamp(48px, 5vw, 72px);
+  font-weight: 500;
+  line-height: 0.95;
+  letter-spacing: -0.065em;
+  margin: 0 0 12px;
+}
+.intro p {
+  margin: 0;
+  font-size: var(--text-body);
+}
+
+/* The stage is pinned: while you adjust settings, the icon is always in view. */
+/* The stage is full viewport height and sticks to the top, so the icon always sits in the middle of the screen. */
+.stage-wrap {
+  grid-area: stage;
+  align-self: stretch;
+  position: relative;
+}
+.stage-sticky {
+  position: sticky;
+  top: 20px;
+  height: calc(100vh - 40px);
+  height: calc(100svh - 40px);
+  display: grid;
+  place-items: center;
+  width: 100%;
+}
+.stage {
+  position: relative;
+  width: min(100%, 720px, calc(100svh - 80px));
+  aspect-ratio: 1;
+}
+.caption {
+  text-align: center;
+  font-size: 12px;
+}
+/* A file is being dragged over the page: highlight the stage, it can be dropped anywhere. */
+.is-over .stage canvas {
+  outline: 2px dashed var(--ink);
+  outline-offset: -10px;
+}
+.stage canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 24px;
+  /* The checkerboard shows only in no-background mode, to show the PNG is transparent. */
+  background: repeating-conic-gradient(var(--color-off-white) 0 25%, color-mix(in srgb, var(--color-black) 6%, var(--color-off-white)) 0 50%) 0 0 / 24px 24px;
+}
+.unsupported {
+  display: none;
+}
+.is-unsupported .unsupported {
+  display: block;
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  padding: 24px;
+}
+
+/* All settings in one soft panel: near-white, large radius,
+   a light top edge and a wide soft shadow. */
+.controls {
+  grid-area: controls;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px;
+  border-radius: 28px;
+  font-size: var(--text-meta);
+  background: linear-gradient(180deg, #fff 0%, var(--panel) 100%);
+  border: 0.5px solid color-mix(in srgb, var(--color-black) 8%, transparent);
+  box-shadow:
+    inset 0 1px 0 #fff,
+    0 1px 2px color-mix(in srgb, var(--color-black) 5%, transparent),
+    0 16px 40px -16px color-mix(in srgb, var(--color-black) 22%, transparent);
+}
+.upload input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+}
+/* Black and white, but not flat and sterile: soft black, rounded corners, 0.5px strokes. */
+/* On body, not .glass: the footer uses these colors too. */
+body {
+  --ink: color-mix(in srgb, var(--color-black) 88%, var(--color-off-white));
+  --hair: color-mix(in srgb, var(--color-black) 22%, transparent);
+  --tray: color-mix(in srgb, var(--color-black) 5%, var(--color-off-white));
+  --raised: color-mix(in srgb, white 70%, var(--color-off-white));
+  --panel: color-mix(in srgb, white 40%, var(--color-off-white));
+  --tick: color-mix(in srgb, var(--color-black) 6%, transparent);
+  /* Raised white surface: thin edge, highlight on top, short soft shadow. */
+  --raise: inset 0 1px 0 #fff, 0 0 0 0.5px color-mix(in srgb, var(--color-black) 10%, transparent),
+    0 1px 2px color-mix(in srgb, var(--color-black) 6%, transparent),
+    0 3px 8px -3px color-mix(in srgb, var(--color-black) 12%, transparent);
+  /* Dark button: slightly lighter than black,
+     a thin highlight on top, 0.5px along the edge. */
+  --btn-dark: linear-gradient(180deg, #3a3a3a 0%, #2a2a2a 100%);
+  --btn-edge: inset 0 0.5px 0 rgb(255 255 255 / 0.16), 0 0 0 0.5px rgb(0 0 0 / 0.5),
+    0 1px 2px rgb(0 0 0 / 0.14);
+}
+.upload span,
+button {
+  display: block;
+  width: 100%;
+  padding: 12px 16px;
+  font-weight: 500;
+  border: 0;
+  border-radius: 999px;
+  background: var(--btn-dark);
+  box-shadow: var(--btn-edge);
+  color: var(--color-off-white);
+  font-family: inherit;
+  font-size: inherit;
+  letter-spacing: inherit;
+  text-align: center;
+  cursor: pointer;
+  transition: transform 120ms ease-out, filter 120ms ease-out;
+}
+.upload span:hover,
+button:hover {
+  filter: brightness(1.12);
+}
+.upload span:active,
+button:active {
+  transform: scale(0.985);
+}
+.upload:focus-within span {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+.hint,
+.status {
+  margin: 0;
+  opacity: 0.6;
+  text-wrap: pretty;
+}
+.status {
+  text-align: center;
+}
+.status:empty {
+  display: none;
+}
+/* Slider: a gray pill with ticks, a white pill thumb with a label.
+   A transparent native range sits on top: mouse, touch, keyboard and screen readers work as usual.
+   The range thumb and the visible thumb share one width (--tw), so their positions match. */
+.range {
+  --tw: 104px;
+  --p: 0.5;
+  position: relative;
+  display: block;
+  height: 40px;
+  border-radius: 999px;
+  background: var(--tray);
+  box-shadow: inset 0 1px 2px color-mix(in srgb, var(--color-black) 7%, transparent),
+    inset 0 0 0 0.5px color-mix(in srgb, var(--color-black) 6%, transparent);
+}
+/* Ticks: light along the whole length, darker where passed. */
+.range::before,
+.range::after {
+  content: "";
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  top: 12px;
+  bottom: 12px;
+  background: repeating-linear-gradient(90deg, var(--tick) 0 1px, transparent 1px 15px);
+  pointer-events: none;
+}
+.range::after {
+  --tick: color-mix(in srgb, var(--color-black) 14%, transparent);
+  clip-path: inset(0 calc((1 - var(--p)) * 100%) 0 0);
+}
+.range input {
+  -webkit-appearance: none;
+  appearance: none;
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: grab;
+}
+.range input:active {
+  cursor: grabbing;
+}
+.range input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: var(--tw);
+  height: 40px;
+}
+.range input::-moz-range-thumb {
+  width: var(--tw);
+  height: 40px;
+  border: 0;
+}
+.thumb {
+  position: absolute;
+  z-index: 1;
+  top: 3px;
+  bottom: 3px;
+  left: calc(3px + var(--p) * (100% - var(--tw) - 6px));
+  width: var(--tw);
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #fff 0%, var(--panel) 100%);
+  box-shadow: var(--raise);
+  pointer-events: none;
+}
+.thumb > span {
+  grid-area: 1 / 1;
+  transition: opacity 120ms ease-out;
+}
+.name {
+  font-weight: 500;
+}
+.val {
+  opacity: 0;
+  font-variant-numeric: tabular-nums;
+}
+.val::after {
+  content: attr(data-v);
+}
+/* While dragging or adjusting with the keyboard, the number replaces the label. */
+.range:has(input:active) .name,
+.range:has(input:focus-visible) .name {
+  opacity: 0;
+}
+.range:has(input:active) .val,
+.range:has(input:focus-visible) .val {
+  opacity: 1;
+}
+.range:has(input:focus-visible) .thumb {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+/* Segments: a recessed tray, the selected one is filled. */
+fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+}
+/* Group and toggle labels are medium: they are names. */
+legend,
+.check span {
+  font-weight: 500;
+}
+legend {
+  width: 100%;
+  padding: 0;
+  margin-bottom: 6px;
+}
+/* One selected pill per tray, sliding to the new option (like iOS segmented controls):
+   --n is how many options, --i is which one is selected. */
+.seg {
+  --n: 2;
+  --i: 0;
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  width: 100%;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--tray);
+  box-shadow: inset 0 1px 2px color-mix(in srgb, var(--color-black) 7%, transparent),
+    inset 0 0 0 0.5px color-mix(in srgb, var(--color-black) 6%, transparent);
+}
+fieldset label {
+  flex: 1;
+}
+fieldset input {
+  position: absolute;
+  opacity: 0;
+}
+fieldset span {
+  display: block;
+  padding: 8px 6px;
+  border-radius: 999px;
+  text-align: center;
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity 160ms ease-out;
+}
+.seg::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  top: 3px;
+  bottom: 3px;
+  left: 3px;
+  width: calc((100% - 6px - (var(--n) - 1) * 2px) / var(--n));
+  transform: translateX(calc(var(--i) * (100% + 2px)));
+  border-radius: 999px;
+  background: linear-gradient(180deg, #fff 0%, var(--panel) 100%);
+  box-shadow: var(--raise);
+  transition: transform 360ms cubic-bezier(0.3, 1.3, 0.4, 1), opacity 160ms ease-out;
+}
+.seg:has(> label:nth-child(3)) {
+  --n: 3;
+}
+.seg:has(> label:nth-child(4)) {
+  --n: 4;
+}
+.seg:has(> label:nth-child(5)) {
+  --n: 5;
+}
+.seg:has(> label:nth-child(2) input:checked) {
+  --i: 1;
+}
+.seg:has(> label:nth-child(3) input:checked) {
+  --i: 2;
+}
+.seg:has(> label:nth-child(4) input:checked) {
+  --i: 3;
+}
+.seg:has(> label:nth-child(5) input:checked) {
+  --i: 4;
+}
+/* Nothing selected (preset cleared by a manual change): no pill. */
+.seg:not(:has(input:checked))::before {
+  opacity: 0;
+}
+fieldset label:hover span {
+  opacity: 0.85;
+}
+fieldset input:checked + span {
+  opacity: 1;
+  font-weight: 500;
+}
+fieldset input:focus-visible + span {
+  outline: 2px solid var(--ink);
+  outline-offset: 1px;
+}
+/* Angle and spin only matter when sides are selected; thickness only when volume is on. */
+[data-volume="off"] .thick,
+[data-sides="all"] .directional {
+  opacity: 0.35;
+  pointer-events: none;
+}
+/* Checkboxes as toggles. */
+.check {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+}
+.check input {
+  order: 2;
+  -webkit-appearance: none;
+  appearance: none;
+  position: relative;
+  width: 36px;
+  height: 22px;
+  margin: 0;
+  border-radius: 22px;
+  background: var(--tray);
+  box-shadow: inset 0 1px 2px color-mix(in srgb, var(--color-black) 10%, transparent),
+    inset 0 0 0 0.5px color-mix(in srgb, var(--color-black) 8%, transparent);
+  cursor: pointer;
+  transition: background-color 160ms ease-out;
+}
+.check input::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: linear-gradient(180deg, #fff 0%, var(--panel) 100%);
+  box-shadow: var(--raise);
+  transition: transform 200ms cubic-bezier(0.3, 1.4, 0.5, 1);
+}
+.check input:checked {
+  background: var(--btn-dark);
+  box-shadow: var(--btn-edge);
+}
+.check input:checked::before {
+  transform: translateX(14px);
+}
+.check input:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+.actions {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+}
+.actions button + button {
+  background: linear-gradient(180deg, #fff 0%, var(--panel) 100%);
+  color: var(--ink);
+  box-shadow: var(--raise);
+}
+.actions button + button:hover {
+  filter: brightness(0.98);
+}
+button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+/* Share is a small link under the buttons, shown after the first save. */
+.share {
+  width: auto;
+  align-self: center;
+  padding: 6px 12px;
+  background: none;
+  box-shadow: none;
+  color: var(--ink);
+  animation: share-in 320ms cubic-bezier(0.3, 1.3, 0.4, 1);
+}
+.share:hover {
+  filter: none;
+  background: var(--tray);
+}
+/* On iPhone it's a full dark button: it's the only way to save the file. */
+.share.is-save {
+  width: 100%;
+  align-self: stretch;
+  /* Close to "Record video", like the buttons in .actions (8px), not with the panel's shared gap. */
+  margin-top: -6px;
+  padding: 12px 16px;
+  background: var(--btn-dark);
+  box-shadow: var(--btn-edge);
+  color: var(--color-off-white);
+}
+.share.is-save:hover {
+  background: var(--btn-dark);
+  filter: brightness(1.12);
+}
+.share[hidden] {
+  display: none;
+}
+@keyframes share-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+/* While video records, the button fills over one loop, so you can see how long to wait. */
+.is-recording [data-video] {
+  opacity: 1;
+  background:
+    linear-gradient(var(--tray), var(--tray)) left / 0% 100% no-repeat,
+    linear-gradient(180deg, #fff 0%, var(--panel) 100%);
+  animation: rec 4s linear forwards;
+}
+@keyframes rec {
+  to {
+    background-size: 100% 100%, auto;
+  }
+}
+.presets span {
+  padding-inline: 0;
+}
+
+/* Advanced: secondary settings are collapsed so the download buttons stay on the first screen.
+   Opens smoothly (interpolate-size; instantly where it isn't supported). */
+.glass {
+  interpolate-size: allow-keywords;
+}
+.advanced summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 0;
+  list-style: none;
+  font-weight: 500;
+  cursor: pointer;
+}
+.advanced summary::-webkit-details-marker {
+  display: none;
+}
+.advanced summary::after {
+  content: "";
+  width: 7px;
+  height: 7px;
+  margin-right: 6px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  opacity: 0.6;
+  transform: translateY(-2px) rotate(45deg);
+  transition: transform 240ms ease-out;
+}
+.advanced[open] summary::after {
+  transform: translateY(2px) rotate(-135deg);
+}
+.advanced summary:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+.advanced::details-content {
+  block-size: 0;
+  overflow: hidden;
+  transition: block-size 360ms cubic-bezier(0.3, 0.9, 0.4, 1), content-visibility 360ms allow-discrete;
+}
+.advanced[open]::details-content {
+  block-size: auto;
+}
+.advanced.instant::details-content {
+  transition: none;
+}
+/* Side padding so thumb and tray shadows aren't clipped. */
+.adv-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 0 -6px;
+  padding: 12px 6px 6px;
+}
+
+/* Footer: the ☺ signature. */
+.bottom {
+  grid-area: foot;
+  display: grid;
+  gap: 6px;
+  padding: 8px 20px 0;
+  font-size: var(--text-meta);
+}
+.bottom p {
+  margin: 0;
+}
+.made {
+  font-size: var(--text-body);
+  font-weight: 500;
+}
+/* The name links to the live version: clearly clickable, but without the blue browser underline. */
+.made a {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--hair);
+  transition: text-decoration-color 120ms ease-out;
+}
+.made a:hover {
+  text-decoration-color: currentColor;
+}
+
+/* Short laptop screen: tighter, so Download PNG stays on the first screen. */
+@media (min-width: 761px) and (max-height: 820px) {
+  .intro {
+    padding-top: 44px;
+  }
+  h1 {
+    font-size: 52px;
+    margin-bottom: 8px;
+  }
+  .glass {
+    row-gap: 16px;
+  }
+  .controls {
+    gap: 10px;
+    padding: 16px;
+  }
+  .share.is-save {
+    margin-top: -2px;
+  }
+  .controls > .hint:not(.caption) {
+    display: none;
+  }
+}
+
+@media (max-width: 760px) {
+  .glass {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "intro" "stage" "controls" "foot";
+  }
+  .intro {
+    padding: 0;
+  }
+  /* On phones the icon sticks to the top of the screen, and the settings scroll under it. */
+  .stage-wrap {
+    position: sticky;
+    align-self: start;
+    top: 0;
+    z-index: 5;
+    max-width: none;
+    margin-inline: -24px;
+    width: calc(100% + 48px);
+    padding: 8px 24px 10px;
+    background: var(--color-off-white);
+  }
+  .stage-sticky {
+    position: static;
+    height: auto;
+    display: block;
+  }
+  .stage {
+    width: min(100%, 42vh);
+    margin-inline: auto;
+  }
+}
