@@ -592,13 +592,20 @@ document.addEventListener("drop", (e) => {
 // Track plays a file, picked with Track itself or dropped on the page.
 const soundRadio = (mode) => root.querySelector(`input[name=sound][value=${mode}]`);
 const trackRadio = soundRadio("track");
-const CAPTION = caption.textContent;
-
-// The line under the buttons says what the video will be: the loop, one round of the tune, or a stretch of the sound.
 function showSound(mode) {
   soundRadio(mode).checked = true;
-  caption.textContent = mode === "off" ? CAPTION : mode === "demo" ? caption.dataset.demo : caption.dataset.sound;
+  showCaption();
 }
+
+// The line under the buttons says what you'll get: which PNG, and a video that's the loop,
+// one round of the tune, or a stretch of your own sound.
+function showCaption() {
+  const mode = root.querySelector("input[name=sound]:checked")?.value ?? "off";
+  const video = mode === "off" ? "MP4 1080p, 4 s" : mode === "demo" ? "MP4 1080p, 10 s with the tune" : "MP4 1080p, 12 s with sound";
+  const own = mode === "mic" || mode === "track" ? "Your logo and sound never leave your browser." : "Your logo never leaves your browser.";
+  caption.textContent = `${imageFormat().note} · ${video} · ${own}`;
+}
+for (const input of root.querySelectorAll("input[name=image]")) input.addEventListener("change", showCaption);
 
 async function setSound(mode, file) {
   showSound(mode);
@@ -946,23 +953,43 @@ document.addEventListener("paste", (e) => {
 
 // --- Export ---
 
-// The frame is rendered SUPERSAMPLE times larger and scaled down to the final size.
-function frameInto(out, p, phase) {
-  renderer.setSize(out.width * SUPERSAMPLE);
+// The frame is rendered up to SUPERSAMPLE times larger and scaled down to the final size.
+// For 2048 that would be a 4096 canvas, past what phones allow, so the supersampling shrinks to stay under ~12 MP.
+const MAX_RENDER = Math.sqrt(12e6);
+function frameInto(out, p, phase, opaque = false) {
+  renderer.setSize(Math.round(out.width * Math.min(SUPERSAMPLE, MAX_RENDER / out.width)));
   renderer.render(p, phase);
-  const ctx = out.getContext("2d");
+  const ctx = out.getContext("2d", { alpha: !opaque });
   ctx.clearRect(0, 0, out.width, out.height);
   ctx.imageSmoothingQuality = "high";
   ctx.drawImage(canvas, 0, 0, out.width, out.height);
 }
 
+// What Download PNG makes. Avatar: the glass as a circle filling the frame, for round profile pictures.
+// App Store: the shape fills the square with no shadow and no transparency; Apple rounds the corners itself.
+const IMAGES = {
+  icon: { px: EXPORT_PX, name: "glass-icon.png", note: "PNG 1024 px" },
+  large: { px: 2048, name: "glass-icon-2048.png", note: "PNG 2048 px" },
+  avatar: { px: 1024, name: "glass-avatar.png", note: "Round PNG 1024 px", fill: true, shape: "circle" },
+  store: { px: 1024, name: "glass-app-store.png", note: "App Store PNG 1024 px", fill: true, opaque: true },
+};
+const imageFormat = () => IMAGES[root.querySelector("input[name=image]:checked")?.value] ?? IMAGES.icon;
+
 pngButton.addEventListener("click", () => {
+  const format = imageFormat();
   const out = document.createElement("canvas");
-  out.width = out.height = EXPORT_PX;
+  out.width = out.height = format.px;
   const phase = phaseAt(performance.now());
-  frameInto(out, withTurn(live(target(params)), phase), phase);
-  const done = (blob) => {
-    if (blob) save(blob, "glass-icon.png");
+  const look = target({
+    ...params,
+    ...(format.shape ? { shape: format.shape } : {}),
+    ...(format.opaque && params.background === "none" ? { background: "light", bg: BG.light } : {}),
+  });
+  const framed = format.fill ? { ...live(look), frame: 1, shadow: 0 } : live(look);
+  frameInto(out, withTurn(framed, phase), phase, format.opaque);
+  const done = async (blob) => {
+    if (blob && format.opaque) blob = await withoutAlpha(blob, out);
+    if (blob) save(blob, format.name);
     draw();
   };
   // iOS only reliably opens the Share sheet in the same tick as the tap, and toBlob responds later,
@@ -970,6 +997,45 @@ pngButton.addEventListener("click", () => {
   if (ios) done(dataUrlToBlob(out.toDataURL("image/png")));
   else out.toBlob(done, "image/png");
 });
+
+// App Store Connect refuses an icon with an alpha channel. Browsers write RGB from an opaque canvas, mostly;
+// where one still writes RGBA (PNG color type 6), the pixels are re-encoded as RGB here.
+async function withoutAlpha(blob, out) {
+  const head = new Uint8Array(await blob.slice(0, 26).arrayBuffer());
+  if (head[25] !== 6 || typeof CompressionStream === "undefined") return blob;
+  const { width: w, height: h } = out;
+  const px = out.getContext("2d").getImageData(0, 0, w, h).data;
+  const rows = new Uint8Array(h * (w * 3 + 1)); // each row starts with filter type 0
+  for (let y = 0, o = 0; y < h; y++) {
+    rows[o++] = 0;
+    for (let x = 0; x < w; x++, o += 3) rows.set(px.subarray((y * w + x) * 4, (y * w + x) * 4 + 3), o);
+  }
+  const zipped = new Uint8Array(await new Response(new Blob([rows]).stream().pipeThrough(new CompressionStream("deflate"))).arrayBuffer());
+  const ihdr = new Uint8Array(13);
+  new DataView(ihdr.buffer).setUint32(0, w);
+  new DataView(ihdr.buffer).setUint32(4, h);
+  ihdr.set([8, 2, 0, 0, 0], 8); // 8-bit RGB
+  const sig = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
+  return new Blob([sig, pngChunk("IHDR", ihdr), pngChunk("IDAT", zipped), pngChunk("IEND", new Uint8Array(0))], { type: "image/png" });
+}
+
+let crcTable = null;
+function pngChunk(type, data) {
+  crcTable ??= Array.from({ length: 256 }, (_, n) => {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    return c >>> 0;
+  });
+  const chunk = new Uint8Array(12 + data.length);
+  const view = new DataView(chunk.buffer);
+  view.setUint32(0, data.length);
+  for (let i = 0; i < 4; i++) chunk[4 + i] = type.charCodeAt(i);
+  chunk.set(data, 8);
+  let crc = 0xffffffff;
+  for (let i = 4; i < 8 + data.length; i++) crc = crcTable[(crc ^ chunk[i]) & 0xff] ^ (crc >>> 8);
+  view.setUint32(8 + data.length, (crc ^ 0xffffffff) >>> 0);
+  return chunk;
+}
 
 videoButton.addEventListener("click", async () => {
   // With sound on, the video carries it: the codecs include audio (AAC in MP4, which X takes), and the clip is a stretch of the track.

@@ -32,6 +32,8 @@
  * @property {Float32Array} [bands] 8 frequency bands, 0..1, low to high
  * @property {Float32Array} [drops] 4 small ripples, x, y, age (s), strength each
  * @property {[number, number]} [tilt] where the glass leans, -1..1 per axis; absent in exports
+ * @property {number} [frame] share of the frame the icon takes, ICON_SCALE by default, 1 to fill it
+ * @property {number} [shadow] 1: shadow under the icon (default), 0: none
  */
 
 // The icon takes 80% of the frame, leaving 10% per side for the shadow and breathing room.
@@ -84,6 +86,8 @@ uniform vec4 u_ring;        // beat ripples: x age (s) and y strength of the new
 uniform float u_bands[8];   // sound by frequency, low to high, 0..1; laid along the fringe from red to violet
 uniform vec4 u_drops[4];    // small ripples: xy center, z age (s), w strength
 uniform vec2 u_tilt;        // where the glass leans, toward the cursor or with the phone: -1..1 per axis, 0 when still
+uniform float u_zoom;       // 1: the icon takes ${Math.round(ICON_SCALE * 100)}% of the frame; less fills more (avatar and App Store fill all of it)
+uniform float u_shadow;     // 1: soft shadow under the icon, 0: none (avatar, App Store)
 
 const int TAPS = 32;
 const float TAU = 6.2831853;
@@ -205,6 +209,7 @@ float ign(vec2 c) {
 void main() {
   float T = u_phase * TAU;
   vec2 p = (v_uv - 0.5) * 2.0 / ${ICON_SCALE.toFixed(2)};
+  p *= u_zoom;
   // Bass pumps the whole icon a little, like a speaker cone.
   p *= 1.0 - 0.012 * u_motion * sin(T) - 0.025 * u_sound.y;
 
@@ -222,7 +227,7 @@ void main() {
   // Outside: the background and a soft shadow slightly below the icon.
   vec2 sn;
   float sd = max(shape(p + vec2(0.0, 0.05) + u_tilt * 0.04, sn), 0.0); // the shadow slides away from the lean
-  float shadow = exp(-sd / 0.12) * (u_mode > 0.5 && u_mode < 1.5 ? 0.45 : 0.035) * (1.0 + 0.4 * u_volume * u_depth);
+  float shadow = exp(-sd / 0.12) * (u_mode > 0.5 && u_mode < 1.5 ? 0.45 : 0.035) * (1.0 + 0.4 * u_volume * u_depth) * u_shadow;
   vec4 outside;
   if (u_mode > 1.5) {
     outside = vec4(0.0, 0.0, 0.0, shadow);
@@ -394,7 +399,7 @@ void main() {
 const UNIFORMS = [
   "u_sdf", "u_color", "u_texSize", "u_halfPx", "u_n", "u_edge", "u_refract", "u_disp", "u_phase",
   "u_motion", "u_size", "u_tint", "u_sideMix", "u_sideTwo", "u_angle", "u_spread", "u_liquid", "u_volume", "u_depth", "u_bg", "u_mode",
-  "u_sound", "u_ring", "u_bands", "u_drops", "u_tilt",
+  "u_sound", "u_ring", "u_bands", "u_drops", "u_tilt", "u_zoom", "u_shadow",
 ];
 const SILENT = [0, 0, 0, 0];
 const NO_BANDS = new Float32Array(8);
@@ -489,7 +494,10 @@ export class GlassRenderer {
     const size = this.canvas.width;
     gl.viewport(0, 0, size, size);
     gl.uniform1f(this.loc.u_texSize, this.texSize);
-    gl.uniform1f(this.loc.u_halfPx, (size / 2) * ICON_SCALE);
+    const frame = params.frame ?? ICON_SCALE;
+    gl.uniform1f(this.loc.u_halfPx, (size / 2) * frame);
+    gl.uniform1f(this.loc.u_zoom, frame === ICON_SCALE ? 1 : ICON_SCALE / frame);
+    gl.uniform1f(this.loc.u_shadow, params.shadow ?? 1);
     gl.uniform1f(this.loc.u_n, params.n);
     gl.uniform1f(this.loc.u_edge, params.edge);
     gl.uniform1f(this.loc.u_refract, params.refraction);
