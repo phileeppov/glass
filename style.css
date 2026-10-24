@@ -184,37 +184,53 @@ h1 {
 .after[hidden] {
   display: none;
 }
-/* "New" over what this release added: a small outlined tag, monochrome like the rest of the page, no accent color. */
+/* What this release added: a small ink dot next to each new thing, and one line under the title naming them.
+   The word "New" stays in the dot for screen readers. Monochrome, no accent color. */
 .new {
   display: inline-block;
+  width: 6px;
+  height: 6px;
   margin-left: 6px;
-  padding: 1px 6px 2px;
-  border: 0.5px solid color-mix(in srgb, var(--ink) 55%, transparent);
-  border-radius: 999px;
-  color: var(--ink);
-  font-size: 9.5px;
-  font-weight: 600;
-  letter-spacing: 0.03em;
-  line-height: 1.3;
-  text-transform: uppercase;
-  vertical-align: 1px;
+  padding: 0; /* inside a fieldset legend the segment-label padding would stretch it into an oval */
+  opacity: 1;
+  border-radius: 50%;
+  background: var(--ink);
+  vertical-align: 2px;
+  overflow: hidden;
+  color: transparent;
+  text-indent: 12px;
+  white-space: nowrap;
 }
-.new[hidden] {
+.new[hidden],
+.whatsnew[hidden] {
   display: none;
 }
-/* On a button or the text field it sits on the top edge, over the outline. */
-.soft,
+/* In the text field the dot sits at the right end. */
 .type {
   position: relative;
 }
-.soft .new,
 .type .new {
   position: absolute;
   z-index: 1;
-  top: -7px;
-  right: 10px;
+  top: 18px;
+  right: 16px;
   margin: 0;
-  background: #fff;
+}
+.intro .whatsnew {
+  margin-top: 10px;
+  font-size: var(--text-meta);
+  opacity: 0.6;
+  text-wrap: pretty;
+}
+.whatsnew::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 7px;
+  border-radius: 50%;
+  background: var(--ink);
+  vertical-align: 1px;
 }
 /* The die rolls a third of a turn on every tap. */
 .soft svg {
