@@ -27,6 +27,8 @@
  * @property {number} depth 0: flat glass, 1: with volume
  * @property {Background} background
  * @property {[number, number, number]} bg background color for light/dark, 0..1
+ * @property {[number, number, number, number]} [sound] loudness, bass, beat, unused; all 0 or absent when sound is off
+ * @property {[number, number, number, number]} [ring] beat ripples: age (s) and strength of the newest, then of the one before
  */
 
 // The icon takes 80% of the frame, leaving 10% per side for the shadow and breathing room.
@@ -74,6 +76,8 @@ uniform float u_volume;     // slab thickness, 0..1
 uniform float u_depth;      // 0: flat glass, 1: with volume; continuous so the volume fades out instead of popping off
 uniform vec3 u_bg;
 uniform float u_mode;       // 0 light, 1 dark, 2 transparent
+uniform vec4 u_sound;       // x loudness, y bass, z beat; all 0 when sound is off, and then nothing below changes
+uniform vec4 u_ring;        // beat ripples: x age (s) and y strength of the newest, zw of the one before
 
 const int TAPS = 32;
 const float TAU = 6.2831853;
@@ -170,6 +174,13 @@ vec2 waves(vec2 p, float T) {
   return vec2(a, b) * 0.5;
 }
 
+// A ripple from the center on a beat: a crest that runs out along scaled-down copies of the shape and fades.
+// rr is the superellipse norm (0 center, 1 rim), r is age and strength. Positive pushes outward, negative inward.
+float ring(float rr, vec2 r) {
+  float x = (rr - r.x * 1.9) / 0.075;
+  return x * exp(-x * x) * r.y * exp(-2.5 * r.x);
+}
+
 // Noise with a uniform spectrum: sample jitter instead of banding.
 float ign(vec2 c) {
   return fract(52.9829189 * fract(dot(c, vec2(0.06711056, 0.00583715))));
@@ -178,7 +189,8 @@ float ign(vec2 c) {
 void main() {
   float T = u_phase * TAU;
   vec2 p = (v_uv - 0.5) * 2.0 / ${ICON_SCALE.toFixed(2)};
-  p *= 1.0 - 0.012 * u_motion * sin(T);
+  // Bass pumps the whole icon a little, like a speaker cone.
+  p *= 1.0 - 0.012 * u_motion * sin(T) - 0.025 * u_sound.y;
 
   vec2 nrm;
   float d = shape(p, nrm);
@@ -229,16 +241,22 @@ void main() {
   // Waves in the glass: the smear thickness varies along the rim. None in the center, so the glyph stays even there.
   vec2 wv = waves(p, T);
   float nearEdge = 1.0 - smoothstep(0.0, 0.6, depth);
-  float swell = 1.0 + 0.45 * u_liquid * wv.x * nearEdge;
+  // Loudness swells the waves on top of Blend.
+  float swell = 1.0 + 0.45 * u_liquid * wv.x * nearEdge + 0.45 * u_sound.x * wv.x * nearEdge;
   // A corner is farther from the center than a side's midpoint, so the ray reaches farther, or the corner runs short of glyph.
   float cornerReach = length(p) / max(snorm(p), 1e-3);
   // The band at the rim stays (long tails along the sides); the bridge to the glyph is added on top.
   float k = u_refract * 0.42 * wave * swell * cornerReach * max(rimPull, flow * u_liquid) * side;
   // Color spread is capped: otherwise, at large offsets the fringe smears into wide blotches.
-  float kDisp = min(k, 0.16);
+  // A beat lifts the cap for a moment: a flash of rainbow.
+  float kDisp = min(k, 0.16 + 0.14 * u_sound.z);
   // Sample direction: along the normal; with Liquid it converges toward the center, and the tails pool into the corner.
   vec2 dir = normalize(mix(nrm, p / max(length(p), 1e-3), 0.45 * u_liquid));
-  vec2 ripple = wv * 0.05 * u_liquid * nearEdge * side;
+  // The sound terms are separate additions, not folded into the old ones: with sound off they add exactly 0.
+  vec2 ripple = wv * 0.05 * u_liquid * nearEdge * side + wv * 0.04 * u_sound.x * nearEdge * side;
+  // Beat ripples bend whatever they pass over, the glyph too; the colors split on them below.
+  float rr = 1.0 - depth + wob;
+  vec2 wake = nrm * (ring(rr, u_ring.xy) + ring(rr, u_ring.zw)) * 0.07;
 
   // Volume: a slab with a rounded rim. Thickness sets its visible width and depth,
   // while Edge width still controls the bevel smear. The ray computes the offset; the index comes from Refraction.
@@ -252,7 +270,7 @@ void main() {
   float ior = 1.0 + 0.5 * u_refract;
   // A physically accurate slab bends the ray only slightly, and the look we want smears more than physics does. So with volume the ray
   // through the rim is added to the existing bevel smear: lens plus rainbow.
-  vec2 offC = (vol ? throughSlab(n3, ior, h) * side * wave * u_depth : vec2(0.0)) - dir * k + ripple;
+  vec2 offC = (vol ? throughSlab(n3, ior, h) * side * wave * u_depth : vec2(0.0)) - dir * k + ripple + wake;
 
   // Edge transition width: the pixel size in texels where the sample lands,
   // plus blur that grows with refraction strength, since glass has a soft rim.
@@ -289,8 +307,8 @@ void main() {
       // Red goes deeper, blue stays closer to the edge: red fringe outside, cyan inside.
       // A small spread along the rim softens hard cuts in the glyph.
       float along = (fract(x * 7.31 + jitter) - 0.5) * 0.25;
-      float spread = (0.5 - x) * order;
-      vec2 off = -dir * (k + kDisp * u_disp * spread * 0.9) + ripple;
+      float spread = (0.5 - x) * order * (1.0 + 0.8 * u_sound.z);
+      vec2 off = -dir * (k + kDisp * u_disp * spread * 0.9) + ripple + wake * (1.0 + u_disp * spread * 1.2);
       vec4 c;
       if (vol) {
         off += throughSlab(n3, ior + u_disp * 0.3 * spread, h) * side * wave * u_depth;
@@ -346,7 +364,9 @@ void main() {
 const UNIFORMS = [
   "u_sdf", "u_color", "u_texSize", "u_halfPx", "u_n", "u_edge", "u_refract", "u_disp", "u_phase",
   "u_motion", "u_size", "u_tint", "u_sideMix", "u_sideTwo", "u_angle", "u_spread", "u_liquid", "u_volume", "u_depth", "u_bg", "u_mode",
+  "u_sound", "u_ring",
 ];
+const SILENT = [0, 0, 0, 0];
 
 export class GlassRenderer {
   canvas;
@@ -454,6 +474,8 @@ export class GlassRenderer {
     gl.uniform1f(this.loc.u_depth, params.depth);
     gl.uniform3fv(this.loc.u_bg, params.bg);
     gl.uniform1f(this.loc.u_mode, params.background === "light" ? 0 : params.background === "dark" ? 1 : 2);
+    gl.uniform4fv(this.loc.u_sound, params.sound ?? SILENT);
+    gl.uniform4fv(this.loc.u_ring, params.ring ?? SILENT);
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);

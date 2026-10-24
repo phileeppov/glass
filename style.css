@@ -145,7 +145,8 @@ h1 {
     0 1px 2px color-mix(in srgb, var(--color-black) 5%, transparent),
     0 16px 40px -16px color-mix(in srgb, var(--color-black) 22%, transparent);
 }
-.upload input {
+.upload input,
+.track-input {
   position: absolute;
   opacity: 0;
   width: 1px;
@@ -514,13 +515,13 @@ button:disabled {
     transform: translateY(-6px);
   }
 }
-/* While video records, the button fills over one loop, so you can see how long to wait. */
+/* While video records, the button fills over the recording, so you can see how long to wait: one loop, or longer with sound. */
 .is-recording [data-video] {
   opacity: 1;
   background:
     linear-gradient(var(--tray), var(--tray)) left / 0% 100% no-repeat,
     linear-gradient(180deg, #fff 0%, var(--panel) 100%);
-  animation: rec 4s linear forwards;
+  animation: rec var(--rec, 4s) linear forwards;
 }
 @keyframes rec {
   to {

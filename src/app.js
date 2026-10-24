@@ -1,12 +1,14 @@
 // The /glass page: logo upload, sliders, PNG and video export. Everything runs in the browser; nothing goes to a server.
 import { GlassRenderer, LOGO_FILL, SDF_SPREAD } from "./renderer.js";
 import { buildSdf } from "./sdf.js";
+import { Sound } from "./sound.js";
 
 const LAYER = 1024; // logo textures, px
 const EXPORT_PX = 1024;
 const VIDEO_PX = 1080;
 const SUPERSAMPLE = 2; // PNG is rendered at 2x and scaled down, so edges aren't jagged. Video can't keep 60 fps this way.
 const PERIOD = 4000; // one animation loop, ms
+const CLIP = 12000; // video with sound, ms: a stretch of the track, not the loop
 const TAU = Math.PI * 2;
 
 // Default logo: the brand's ☺, until the user uploads their own.
@@ -21,6 +23,8 @@ const pngButton = root.querySelector("[data-png]");
 const videoButton = root.querySelector("[data-video]");
 const status = root.querySelector("[data-status]");
 const shareButton = root.querySelector("[data-share]");
+const trackInput = root.querySelector("[data-track]");
+const caption = root.querySelector("[data-caption]");
 
 const tokens = getComputedStyle(document.documentElement);
 const BG = {
@@ -59,6 +63,9 @@ let logoColor = "original";
 let logoLuma = 0; // average logo luminance 0..1; a dark logo on a dark background is turned white
 let autoColor = false; // the color was switched by the code, not by the user
 let recording = false;
+const sound = new Sound();
+let soundOn = false; // the loop runs on the sound clock (see listen)
+let clock = 0; // loop phase while sound is on
 
 let renderer;
 try {
@@ -72,6 +79,7 @@ try {
 
 async function loadFile(file) {
   if (recording) return; // the logo doesn't change mid-recording
+  if (isAudio(file)) return void setSound("track", file); // a song dropped or pasted on the page plays as the track
   if (autoColor) setColor("original");
   if (file.type === "image/svg+xml" || file.name.toLowerCase().endsWith(".svg")) {
     await loadSvg(await file.text());
@@ -80,6 +88,10 @@ async function loadFile(file) {
   } else {
     say("That file isn't an image. Try an SVG or PNG.");
   }
+}
+
+function isAudio(file) {
+  return file.type.startsWith("audio/") || /\.(mp3|m4a|aac|wav|ogg|flac)$/i.test(file.name);
 }
 
 // Browsers render an SVG without width/height at a tiny size, so set the size from viewBox.
@@ -226,6 +238,7 @@ const spinning = () => spin && params.sides !== "all";
 const animated = () => params.motion > 0 || spinning();
 
 function phaseAt(now) {
+  if (soundOn) return clock;
   return animated() ? ((now - t0) % PERIOD) / PERIOD : 0;
 }
 
@@ -290,22 +303,54 @@ function previewSize() {
   return Math.min(Math.round(css * Math.min(devicePixelRatio, 2)), 1400);
 }
 
+// Sound on top of the settings: bass rocks the rim, a beat flashes refraction and rainbow;
+// the shader adds the swell of the waves, the pump and the ripples. Silent: the same object, nothing changes.
+function live(p) {
+  const { level, bass, hit, rings } = sound;
+  if (!level && !bass && !hit && !rings.length) return p;
+  const [a, b] = rings;
+  return {
+    ...p,
+    motion: p.motion + 0.7 * bass,
+    refraction: p.refraction + 0.6 * hit,
+    dispersion: p.dispersion + 0.3 * hit,
+    sound: [level, bass, hit, 0],
+    ring: [a?.age ?? 0, a?.amp ?? 0, b?.age ?? 0, b?.amp ?? 0],
+  };
+}
+
+// One sound step. With sound on, the loop clock runs faster when it's loud, so the waves rush with the music.
+// The phase is handed over both ways, so turning sound on or off doesn't make the glass jump.
+function listen(now, dt) {
+  const on = sound.mode !== "off";
+  if (on !== soundOn) {
+    if (on) clock = phaseAt(now);
+    else t0 = now - clock * PERIOD;
+    soundOn = on;
+  }
+  const alive = sound.update(dt);
+  if (soundOn) clock = (clock + (dt / PERIOD) * (1 + 1.5 * sound.level)) % 1;
+  return alive;
+}
+
 // A frame without easing, for resize and after export.
 function draw() {
   if (recording) return;
   if (!shown) shown = target(params);
   renderer.setSize(previewSize());
   const phase = phaseAt(performance.now());
-  renderer.render(withTurn(shown, phase), phase);
+  renderer.render(withTurn(live(shown), phase), phase);
 }
 
 function loop(now) {
   frame = 0;
   if (recording) return;
-  const moving = ease(target(params), Math.min(now - last, 100));
+  const dt = Math.min(now - last, 100);
+  const moving = ease(target(params), dt);
+  const hearing = listen(now, dt);
   last = now;
   draw();
-  if (moving || animated()) frame = requestAnimationFrame(loop);
+  if (moving || animated() || hearing) frame = requestAnimationFrame(loop);
 }
 
 // Start redrawing if the loop is idle.
@@ -440,6 +485,73 @@ document.addEventListener("drop", (e) => {
   if (file) loadFile(file);
 });
 
+// --- Sound ---
+
+// Off, Mic or Track. Track plays a file, picked with Track itself or dropped on the page.
+const soundRadio = (mode) => root.querySelector(`input[name=sound][value=${mode}]`);
+const trackRadio = soundRadio("track");
+const CAPTION = caption.textContent;
+
+function showSound(mode) {
+  soundRadio(mode).checked = true;
+  caption.textContent = mode === "off" ? CAPTION : caption.dataset.sound;
+}
+
+async function setSound(mode, file) {
+  showSound(mode);
+  try {
+    if (mode === "mic") await sound.mic();
+    else if (mode === "track") await sound.track(file);
+    else sound.off();
+    if (sound.wanted === mode) say(mode === "track" ? `♪ ${sound.name}` : "");
+  } catch (e) {
+    if (sound.wanted !== mode) return;
+    say(soundError(mode, e));
+    // Playback refused because there was no tap yet (a file dropped on a fresh page): the track stays, a tap on Track starts it.
+    if (mode === "track" && e?.name === "NotAllowedError" && sound.hasTrack) return;
+    sound.off();
+    showSound("off");
+  }
+  kick();
+}
+
+function soundError(mode, e) {
+  const name = e?.name ?? "";
+  if (mode === "mic") {
+    if (e?.message === "insecure") return "The mic only works on a secure (https) page.";
+    if (name === "NotAllowedError" || name === "SecurityError") return "Mic access is blocked. Allow it for this page and try again.";
+    if (name === "NotFoundError" || name === "OverconstrainedError") return "No mic found.";
+    if (name === "NotReadableError") return "The mic is busy in another app.";
+    return "Couldn't start the mic.";
+  }
+  if (name === "NotAllowedError") return "Tap Track to play it.";
+  return "Couldn't play that file. Try MP3, M4A or WAV.";
+}
+
+for (const input of root.querySelectorAll("input[name=sound]")) {
+  input.addEventListener("change", () => {
+    if (!input.checked) return;
+    if (input.value === "track" && !sound.hasTrack) return void trackInput.click();
+    setSound(input.value);
+  });
+}
+
+// Track tapped while it's already selected: start it if it's stopped, otherwise pick another file.
+trackRadio.parentElement.addEventListener("click", (e) => {
+  if (e.target === trackRadio || !trackRadio.checked) return;
+  if (!sound.hasTrack || (sound.mode === "track" && !sound.audio.paused)) trackInput.click();
+  else setSound("track");
+});
+
+trackInput.addEventListener("change", () => {
+  const file = trackInput.files?.[0];
+  trackInput.value = "";
+  if (file) setSound("track", file);
+  else showSound(sound.mode);
+});
+// Picker closed without a file: back to what was playing.
+trackInput.addEventListener("cancel", () => showSound(sound.mode));
+
 // --- Presets ---
 
 // Ready-made looks in one click. Studio is the default, in the markup too, so the first screen wows right away.
@@ -572,7 +684,7 @@ pngButton.addEventListener("click", () => {
   const out = document.createElement("canvas");
   out.width = out.height = EXPORT_PX;
   const phase = phaseAt(performance.now());
-  frameInto(out, withTurn(target(params), phase), phase);
+  frameInto(out, withTurn(live(target(params)), phase), phase);
   const done = (blob) => {
     if (blob) save(blob, "glass-icon.png");
     draw();
@@ -584,18 +696,20 @@ pngButton.addEventListener("click", () => {
 });
 
 videoButton.addEventListener("click", async () => {
-  const type =
-    typeof MediaRecorder === "undefined"
-      ? undefined
-      : ["video/mp4;codecs=avc1.640028", "video/mp4", "video/webm;codecs=vp9", "video/webm"].find((t) =>
-          MediaRecorder.isTypeSupported(t),
-        );
+  // With sound on, the video carries it: the codecs include audio (AAC in MP4, which X takes), and the clip is a stretch of the track.
+  const audio = sound.mode !== "off" ? sound.audioTrack : null;
+  const types = audio
+    ? ["video/mp4;codecs=avc1.640028,mp4a.40.2", "video/mp4;codecs=avc1,mp4a.40.2", "video/mp4", "video/webm;codecs=vp9,opus", "video/webm"]
+    : ["video/mp4;codecs=avc1.640028", "video/mp4", "video/webm;codecs=vp9", "video/webm"];
+  const type = typeof MediaRecorder === "undefined" ? undefined : types.find((t) => MediaRecorder.isTypeSupported(t));
   if (!type) return say("This browser can't record video. Try Chrome or Safari.");
+  const length = audio ? CLIP : PERIOD;
 
   recording = true;
   // Must reset: otherwise kick() after recording thinks the loop is alive, and the preview freezes.
   cancelAnimationFrame(frame);
   frame = 0;
+  videoButton.style.setProperty("--rec", `${length}ms`);
   root.classList.add("is-recording");
   videoButton.disabled = pngButton.disabled = true;
   say(params.background === "none" ? "Recording on light: video can't be transparent." : "Recording…");
@@ -619,8 +733,8 @@ videoButton.addEventListener("click", async () => {
       frameCanvas.height = VIDEO_PX;
     }
     const fill = `rgb(${base.bg.map((c) => Math.round(c * 255)).join(",")})`;
-    const paint = (phase) => {
-      renderer.render(withTurn(base, phase), phase);
+    const paint = (phase, p = base) => {
+      renderer.render(withTurn(p, phase), phase);
       if (frameCtx) {
         frameCtx.fillStyle = fill;
         frameCtx.fillRect(0, 0, 1920, VIDEO_PX);
@@ -629,28 +743,41 @@ videoButton.addEventListener("click", async () => {
     };
 
     renderer.setSize(VIDEO_PX);
-    paint(0);
-    const stream = (frameCanvas ?? canvas).captureStream(60);
-    const recorder = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: 16_000_000 });
+    paint(audio ? clock : 0);
+    const video = (frameCanvas ?? canvas).captureStream(60);
+    const stream = audio ? new MediaStream([...video.getVideoTracks(), audio]) : video;
+    const recorder = new MediaRecorder(stream, {
+      mimeType: type,
+      videoBitsPerSecond: 16_000_000,
+      ...(audio ? { audioBitsPerSecond: 192_000 } : {}),
+    });
     const chunks = [];
     recorder.ondataavailable = (e) => e.data.size && chunks.push(e.data);
     const done = new Promise((resolve) => (recorder.onstop = () => resolve()));
 
     recorder.start();
     const start = performance.now();
+    let prev = start;
     await new Promise((resolve) => {
       const tick = (now) => {
         const elapsed = now - start;
-        const phase = Math.min(elapsed / PERIOD, 1) % 1;
-        paint(phase);
-        if (elapsed < PERIOD) requestAnimationFrame(tick);
+        if (audio) {
+          // The sound keeps driving the glass while recording, on the same clock as the preview.
+          listen(now, now - prev);
+          paint(clock, live(base));
+        } else {
+          paint(Math.min(elapsed / PERIOD, 1) % 1);
+        }
+        prev = now;
+        if (elapsed < length) requestAnimationFrame(tick);
         else resolve();
       };
       requestAnimationFrame(tick);
     });
     recorder.stop();
     await done;
-    stream.getTracks().forEach((t) => t.stop());
+    // Only the canvas track: the sound track belongs to the page and serves the next recording too.
+    video.getTracks().forEach((t) => t.stop());
 
     const mp4 = type.startsWith("video/mp4");
     if (chunks.length) {
@@ -661,7 +788,9 @@ videoButton.addEventListener("click", async () => {
       message = "This browser can't record video. Try Chrome or Safari.";
     }
   } catch {
-    message = "This browser can't record video. Try Chrome or Safari.";
+    message = audio
+      ? "This browser can't record video with sound. Turn Sound off to record the loop."
+      : "This browser can't record video. Try Chrome or Safari.";
   } finally {
     recording = false;
     root.classList.remove("is-recording");
