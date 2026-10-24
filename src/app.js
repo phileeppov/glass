@@ -1389,7 +1389,7 @@ try {
 }
 
 // The line under the title names what is still untried here; it shortens as you try things and goes when nothing is left.
-const NEW_NAMES = { sound: "sound", text: "typed logos", random: "Randomize", link: "look links", image: "PNG formats", tilt: "tilt" };
+const NEW_NAMES = { sound: "sound", text: "typed logos", random: "Randomize", image: "PNG formats", tilt: "tilt" };
 const whatsNew = document.querySelector("[data-whatsnew]");
 
 function showNew() {

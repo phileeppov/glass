@@ -483,6 +483,42 @@ fieldset {
   font-weight: 600;
   letter-spacing: -0.04em;
 }
+/* Randomize sits in the Look heading as a die: one tap, no label, no row of its own. It turns a third of a turn per roll. */
+.group .die {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  margin-left: auto;
+  padding: 0;
+  border-radius: 50%;
+  background: linear-gradient(180deg, #fff 0%, var(--panel) 100%);
+  box-shadow: var(--raise);
+  color: var(--ink);
+}
+.group .die:hover {
+  filter: brightness(0.98);
+}
+.group .die:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+.die svg {
+  transform: rotate(var(--turn, 0deg));
+  transition: transform 480ms cubic-bezier(0.3, 1.4, 0.5, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .die svg {
+    transition: none;
+  }
+}
+.die .new {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  margin: 0;
+}
 /* For screen readers only: the group name already says it on screen. */
 .sr {
   position: absolute;
