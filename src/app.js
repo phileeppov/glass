@@ -418,6 +418,7 @@ function listen(now, dt) {
     soundOn = on;
   }
   const alive = sound.update(dt);
+  showBars();
   if (soundOn) clock = (clock + (dt / PERIOD) * (1 + 1.5 * sound.level)) % 1;
   return alive;
 }
@@ -603,6 +604,19 @@ const trackRadio = soundRadio("track");
 function showSound(mode) {
   soundRadio(mode).checked = true;
   showCaption();
+}
+
+// While sound plays, its eight bands run at the right end of the Sound heading: the same bands that colour the fringe.
+const bars = document.createElement("span");
+bars.className = "bars";
+bars.setAttribute("aria-hidden", "true");
+bars.innerHTML = "<i></i>".repeat(8);
+bars.hidden = true;
+root.querySelector("[data-sound-head]").append(bars);
+function showBars() {
+  const on = sound.mode !== "off" && !reducedMotion;
+  bars.hidden = !on;
+  if (on) sound.bands.forEach((b, i) => (bars.children[i].style.transform = `scaleY(${(0.15 + 0.85 * b).toFixed(3)})`));
 }
 
 // The line under the buttons says what you'll get: which PNG, and a video that's the loop,

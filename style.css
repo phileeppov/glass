@@ -474,6 +474,8 @@ fieldset {
 }
 /* Look, Sound, Export: the panel in three parts, each opened by its name over a hairline. No boxes, the order is unchanged. */
 .group {
+  display: flex;
+  align-items: center;
   margin: 6px 0 -2px;
   padding: 14px 0 0;
   border-top: 0.5px solid color-mix(in srgb, var(--color-black) 10%, transparent);
@@ -715,6 +717,25 @@ button:disabled {
   to {
     background-size: 100% 100%, auto;
   }
+}
+/* The sound meter at the right end of the Sound heading: eight thin bars, ink colour, growing from the baseline. */
+.bars {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 12px;
+  margin-left: auto;
+}
+.bars[hidden] {
+  display: none;
+}
+.bars i {
+  width: 2px;
+  height: 100%;
+  border-radius: 1px;
+  background: currentColor;
+  transform: scaleY(0.15);
+  transform-origin: bottom;
 }
 /* Each preset key shows your own logo in that look: a small glass over the name. */
 .presets span {
