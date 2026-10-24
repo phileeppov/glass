@@ -231,10 +231,10 @@ h1 {
 .tilt {
   position: absolute;
   left: 50%;
-  bottom: 4%;
+  bottom: 1%; /* in the margin under the icon, clear of the glass */
   width: auto;
-  padding: 7px 14px;
-  font-size: var(--text-meta);
+  padding: 6px 12px;
+  font-size: 12px;
   transform: translateX(-50%);
 }
 .tilt:active {
@@ -599,10 +599,25 @@ fieldset input:focus-visible + span {
   outline: 2px solid var(--ink);
   outline-offset: 2px;
 }
+/* Download and what follows it (Share, the after-download moves, status) dock at the bottom of the screen
+   while the panel scrolls, so Download PNG is on the first screen whatever the panel holds above it. */
+.dock {
+  position: sticky;
+  bottom: 0;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  gap: inherit;
+  margin-inline: -20px;
+  padding: 12px 20px;
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  border-top: 0.5px solid color-mix(in srgb, var(--color-black) 8%, transparent);
+}
 .actions {
   display: grid;
   gap: 8px;
-  margin-top: 8px;
 }
 .actions button + button {
   background: linear-gradient(180deg, #fff 0%, var(--panel) 100%);
@@ -773,6 +788,10 @@ button:disabled {
     gap: 10px;
     padding: 16px;
   }
+  .dock {
+    margin-inline: -16px;
+    padding: 10px 16px;
+  }
   .share.is-save {
     margin-top: -2px;
   }
@@ -782,6 +801,18 @@ button:disabled {
 }
 
 @media (max-width: 760px) {
+  /* On a phone the dock is under the thumb: Download PNG and Record video side by side, tighter. */
+  .dock {
+    gap: 8px;
+    padding: 10px 20px;
+  }
+  .dock .actions {
+    grid-template-columns: 1fr 1fr;
+    margin-top: 0;
+  }
+  .dock .share.is-save {
+    margin-top: 0;
+  }
   .glass {
     grid-template-columns: minmax(0, 1fr);
     grid-template-areas: "intro" "stage" "controls" "foot";
@@ -809,5 +840,12 @@ button:disabled {
   .stage {
     width: min(100%, 42vh);
     margin-inline: auto;
+  }
+}
+
+/* iPhone zooms the page into any text field set under 16px, so on touch screens the field is 16px. */
+@media (pointer: coarse) {
+  .type input {
+    font-size: 16px;
   }
 }

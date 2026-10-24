@@ -144,23 +144,26 @@
           </div>
         </fieldset>
 
-        <div class="actions">
-          <button type="button" data-png>Download PNG</button>
-          <button type="button" data-video>Record video</button>
+        <!-- On a phone this block docks at the bottom of the screen, under the thumb: download is on the first screen. -->
+        <div class="dock">
+          <div class="actions">
+            <button type="button" data-png>Download PNG</button>
+            <button type="button" data-video>Record video</button>
+          </div>
+          <button type="button" class="share" data-share hidden>Share it on X →</button>
+          <!-- Right after a download, while the interest is there: another look, or a link to this one. -->
+          <div class="look after" data-after hidden>
+            <button type="button" class="soft" data-random>
+              <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><rect x="2.5" y="2.5" width="15" height="15" rx="4" fill="none" stroke="currentColor" stroke-width="1.5" /><circle cx="7" cy="7" r="1.4" fill="currentColor" /><circle cx="13" cy="13" r="1.4" fill="currentColor" /><circle cx="13" cy="7" r="1.4" fill="currentColor" /><circle cx="7" cy="13" r="1.4" fill="currentColor" /><circle cx="10" cy="10" r="1.4" fill="currentColor" /></svg>
+              <span>Another look</span>
+            </button>
+            <button type="button" class="soft" data-link aria-label="Copy link to this look">
+              <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><path d="M8.5 11.5a3.2 3.2 0 0 0 4.6 0l2.6-2.6a3.2 3.2 0 0 0-4.6-4.6l-.9.9M11.5 8.5a3.2 3.2 0 0 0-4.6 0l-2.6 2.6a3.2 3.2 0 0 0 4.6 4.6l.9-.9" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" /></svg>
+              <span>Copy link</span>
+            </button>
+          </div>
+          <p class="status" data-status aria-live="polite"></p>
         </div>
-        <button type="button" class="share" data-share hidden>Share it on X →</button>
-        <!-- Right after a download, while the interest is there: another look, or a link to this one. -->
-        <div class="look after" data-after hidden>
-          <button type="button" class="soft" data-random>
-            <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><rect x="2.5" y="2.5" width="15" height="15" rx="4" fill="none" stroke="currentColor" stroke-width="1.5" /><circle cx="7" cy="7" r="1.4" fill="currentColor" /><circle cx="13" cy="13" r="1.4" fill="currentColor" /><circle cx="13" cy="7" r="1.4" fill="currentColor" /><circle cx="7" cy="13" r="1.4" fill="currentColor" /><circle cx="10" cy="10" r="1.4" fill="currentColor" /></svg>
-            <span>Another look</span>
-          </button>
-          <button type="button" class="soft" data-link aria-label="Copy link to this look">
-            <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><path d="M8.5 11.5a3.2 3.2 0 0 0 4.6 0l2.6-2.6a3.2 3.2 0 0 0-4.6-4.6l-.9.9M11.5 8.5a3.2 3.2 0 0 0-4.6 0l-2.6 2.6a3.2 3.2 0 0 0 4.6 4.6l.9-.9" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" /></svg>
-            <span>Copy link</span>
-          </button>
-        </div>
-        <p class="status" data-status aria-live="polite"></p>
         <p class="hint caption" data-caption>PNG 1024 px · MP4 1080p, 4 s · Your logo never leaves your browser.</p>
       </form>
 
