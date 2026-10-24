@@ -1,5 +1,5 @@
 // The /glass page: logo upload, sliders, PNG and video export. Everything runs in the browser; nothing goes to a server.
-import { GlassRenderer, LOGO_FILL, SDF_SPREAD } from "./renderer.js";
+import { GlassRenderer, ICON_SCALE, LOGO_FILL, SDF_SPREAD } from "./renderer.js";
 import { buildSdf } from "./sdf.js";
 import { Sound } from "./sound.js";
 import { TUNE_LENGTH } from "./tune.js";
@@ -347,13 +347,13 @@ function previewSize() {
 
 // Sound on top of the settings: bass swells the glass and rocks the rim, a beat flashes refraction and rainbow;
 // the shader splits the bands along the fringe, swells the waves, pumps the icon and runs the ripples.
-// Silent: the same object, nothing changes.
+// With reduced motion the ripples stay off. Silent: the same object, nothing changes.
 function live(p) {
-  const { level, bass, hit, rings, drops, bands } = sound;
+  const { level, bass, hit, bands } = sound;
+  const rings = reducedMotion ? [] : sound.rings;
+  const drops = reducedMotion ? [] : sound.drops;
   if (!level && !bass && !hit && !rings.length && !drops.length && !bands.some(Boolean)) return p;
   const [a, b] = rings;
-  const packed = new Float32Array(16);
-  drops.forEach((d, i) => packed.set([d.x, d.y, d.age, d.amp], i * 4));
   return {
     ...p,
     motion: p.motion + 0.4 * bass,
@@ -363,8 +363,46 @@ function live(p) {
     sound: [level, bass, hit, 0],
     ring: [a?.age ?? 0, a?.amp ?? 0, b?.age ?? 0, b?.amp ?? 0],
     bands,
-    drops: packed,
+    drops: packDrops(drops),
   };
+}
+
+// The four newest ripples, from the sound and from taps, as the shader takes them.
+function packDrops(list) {
+  const packed = new Float32Array(16);
+  list.slice(0, 4).forEach((d, i) => packed.set([d.x, d.y, d.age, d.amp], i * 4));
+  return packed;
+}
+
+// --- Lean and touch ---
+
+// The glass leans toward the cursor over the stage, or with the phone; a tap drops a ripple where it lands and rings the glass.
+// Preview only: PNG and video come out upright and untouched. Reduced motion turns lean and ripples off.
+const tiltGoal = [0, 0];
+const tilt = [0, 0];
+let touches = []; // tap ripples, newest first: { x, y, age: s, amp }
+const LEAN = 140; // ms, how fast the glass follows
+
+function lean(dt) {
+  const a = 1 - Math.exp(-dt / LEAN);
+  let moving = false;
+  for (let i = 0; i < 2; i++) {
+    const d = tiltGoal[i] - tilt[i];
+    if (Math.abs(d) > 1e-3) {
+      tilt[i] += d * a;
+      moving = true;
+    } else tilt[i] = tiltGoal[i];
+  }
+  for (const t of touches) t.age += dt / 1000;
+  touches = touches.filter((t) => t.age < 1);
+  return moving || touches.length > 0;
+}
+
+function feel(p) {
+  if (!tilt[0] && !tilt[1] && !touches.length) return p;
+  const out = { ...p, tilt: [tilt[0], tilt[1]] };
+  if (touches.length) out.drops = packDrops([...touches, ...(reducedMotion ? [] : sound.drops)].sort((a, b) => a.age - b.age));
+  return out;
 }
 
 // One sound step. With sound on, the loop clock runs faster when it's loud, so the waves rush with the music.
@@ -387,7 +425,7 @@ function draw() {
   if (!shown) shown = target(params);
   renderer.setSize(previewSize());
   const phase = phaseAt(performance.now());
-  renderer.render(withTurn(live(shown), phase), phase);
+  renderer.render(withTurn(feel(live(shown)), phase), phase);
 }
 
 function loop(now) {
@@ -396,9 +434,10 @@ function loop(now) {
   const dt = Math.min(now - last, 100);
   const moving = ease(target(params), dt);
   const hearing = listen(now, dt);
+  const leaning = lean(dt);
   last = now;
   draw();
-  if (moving || animated() || hearing) frame = requestAnimationFrame(loop);
+  if (moving || animated() || hearing || leaning) frame = requestAnimationFrame(loop);
 }
 
 // Start redrawing if the loop is idle.
@@ -626,6 +665,68 @@ trackInput.addEventListener("change", () => {
 });
 // Picker closed without a file: back to what was playing.
 trackInput.addEventListener("cancel", () => showSound(sound.mode));
+
+// --- Lean and touch: input ---
+
+const clamp1 = (v) => Math.max(-1, Math.min(1, v));
+const stageWrap = root.querySelector(".stage-wrap");
+const tiltButton = root.querySelector("[data-tilt]");
+
+// With a mouse, the glass leans toward the cursor while it's over the stage, and settles back when it leaves.
+// That also makes the first second alive: the demo ☺ answers the cursor before anything is clicked.
+if (!reducedMotion) {
+  stageWrap.addEventListener("pointermove", (e) => {
+    if (e.pointerType !== "mouse") return;
+    const r = canvas.getBoundingClientRect();
+    tiltGoal[0] = clamp1(((e.clientX - r.left) / r.width - 0.5) * 2);
+    tiltGoal[1] = clamp1(-((e.clientY - r.top) / r.height - 0.5) * 2);
+    kick();
+  });
+  stageWrap.addEventListener("pointerleave", () => {
+    tiltGoal[0] = tiltGoal[1] = 0;
+    kick();
+  });
+}
+
+// On a phone, the glass leans with the phone. Rest is how it's held: it drifts to the current grip in a couple of seconds.
+let rest = null;
+function onOrient(e) {
+  if (e.beta == null || e.gamma == null) return;
+  rest ??= { beta: e.beta, gamma: e.gamma };
+  rest.beta += (e.beta - rest.beta) * 0.01;
+  rest.gamma += (e.gamma - rest.gamma) * 0.01;
+  tiltGoal[0] = clamp1((e.gamma - rest.gamma) / 20);
+  tiltGoal[1] = clamp1(-(e.beta - rest.beta) / 20);
+  kick();
+}
+
+// iPhone asks for motion access, and only after a tap: one button on the stage. Elsewhere tilt just works.
+if (!reducedMotion && matchMedia("(pointer: coarse)").matches && typeof DeviceOrientationEvent !== "undefined") {
+  if (typeof DeviceOrientationEvent.requestPermission === "function") tiltButton.hidden = false;
+  else addEventListener("deviceorientation", onOrient);
+}
+tiltButton.addEventListener("click", async () => {
+  try {
+    if ((await DeviceOrientationEvent.requestPermission()) !== "granted") throw new Error("denied");
+    addEventListener("deviceorientation", onOrient);
+    tiltButton.hidden = true;
+  } catch {
+    say("Motion access is off. Allow it for this site in Safari settings to tilt the glass.");
+  }
+});
+
+// A tap on the glass: a ripple from that spot and a quiet glass note. The note stays out of the way while sound is on.
+canvas.addEventListener("pointerdown", (e) => {
+  if (recording) return;
+  const r = canvas.getBoundingClientRect();
+  const x = (((e.clientX - r.left) / r.width - 0.5) * 2) / ICON_SCALE;
+  const y = (-((e.clientY - r.top) / r.height - 0.5) * 2) / ICON_SCALE;
+  if (Math.hypot(x, y) > 1.3) return; // the shadow and the margin, not the glass
+  sound.chime();
+  if (reducedMotion) return;
+  touches = [{ x, y, age: 0, amp: 1.6 }, ...touches].slice(0, 4);
+  kick();
+});
 
 // --- Presets ---
 

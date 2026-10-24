@@ -108,6 +108,7 @@ h1 {
 }
 .stage canvas {
   display: block;
+  cursor: pointer; /* a tap ripples the glass */
   width: 100%;
   height: 100%;
   border-radius: 24px;
@@ -180,6 +181,22 @@ h1 {
   .soft svg {
     transition: none;
   }
+}
+/* iPhone only: the one button that asks for motion access, on the stage itself, under the glass. */
+.tilt {
+  position: absolute;
+  left: 50%;
+  bottom: 4%;
+  width: auto;
+  padding: 7px 14px;
+  font-size: var(--text-meta);
+  transform: translateX(-50%);
+}
+.tilt:active {
+  transform: translateX(-50%) scale(0.985);
+}
+.tilt[hidden] {
+  display: none;
 }
 /* Typed text: a recessed field like the slider trays, and sample marks as small raised keys under it. */
 .type {

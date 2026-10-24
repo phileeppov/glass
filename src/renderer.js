@@ -31,6 +31,7 @@
  * @property {[number, number, number, number]} [ring] beat ripples: age (s) and strength of the newest, then of the one before
  * @property {Float32Array} [bands] 8 frequency bands, 0..1, low to high
  * @property {Float32Array} [drops] 4 small ripples, x, y, age (s), strength each
+ * @property {[number, number]} [tilt] where the glass leans, -1..1 per axis; absent in exports
  */
 
 // The icon takes 80% of the frame, leaving 10% per side for the shadow and breathing room.
@@ -82,6 +83,7 @@ uniform vec4 u_sound;       // x loudness, y bass, z beat; all 0 when sound is o
 uniform vec4 u_ring;        // beat ripples: x age (s) and y strength of the newest, zw of the one before
 uniform float u_bands[8];   // sound by frequency, low to high, 0..1; laid along the fringe from red to violet
 uniform vec4 u_drops[4];    // small ripples: xy center, z age (s), w strength
+uniform vec2 u_tilt;        // where the glass leans, toward the cursor or with the phone: -1..1 per axis, 0 when still
 
 const int TAPS = 32;
 const float TAU = 6.2831853;
@@ -219,7 +221,7 @@ void main() {
 
   // Outside: the background and a soft shadow slightly below the icon.
   vec2 sn;
-  float sd = max(shape(p + vec2(0.0, 0.05), sn), 0.0);
+  float sd = max(shape(p + vec2(0.0, 0.05) + u_tilt * 0.04, sn), 0.0); // the shadow slides away from the lean
   float shadow = exp(-sd / 0.12) * (u_mode > 0.5 && u_mode < 1.5 ? 0.45 : 0.035) * (1.0 + 0.4 * u_volume * u_depth);
   vec4 outside;
   if (u_mode > 1.5) {
@@ -270,7 +272,9 @@ void main() {
   vec2 ripple = wv * 0.05 * u_liquid * nearEdge * side + wv * 0.04 * u_sound.x * nearEdge * side;
   // Beat ripples bend whatever they pass over, the glyph too; the colors split on them below.
   float rr = 1.0 - depth + wob;
-  vec2 L = normalize(vec2(-0.55, 0.85));
+  // The light follows the lean; the logo under the glass shifts the other way, more under a thicker slab: parallax.
+  vec2 L = normalize(vec2(-0.55, 0.85) + u_tilt * 0.9);
+  vec2 par = -u_tilt * (0.03 + 0.12 * u_volume * u_depth);
   float beatRing = ring(rr, u_ring.xy) + ring(rr, u_ring.zw);
   vec2 wake = nrm * beatRing * 0.07;
   float ripGlint = beatRing * dot(nrm, L);
@@ -316,7 +320,7 @@ void main() {
   if (reach < 1e-4) {
     // With volume, draw the floor the same way as in the loop; otherwise, where the side mask kills the smear,
     // the contact shadow would disappear and a straight step in tone would show up on the glass.
-    inside = vol ? floorAt(p, blur) : content(p, blur);
+    inside = vol ? floorAt(p + par, blur) : content(p + par, blur);
   } else {
     vec3 acc = vec3(0.0);
     vec3 wsum = vec3(0.0);
@@ -338,9 +342,9 @@ void main() {
       if (vol) {
         off += throughSlab(n3, ior + u_disp * 0.3 * spread, h) * side * wave * u_depth;
         // The along-rim spread blends into the flat version with u_depth; otherwise it jumped at the moment volume was turned off.
-        c = floorAt(p + off + tng * mix(k, length(off), u_depth) * along, blur);
+        c = floorAt(p + par + off + tng * mix(k, length(off), u_depth) * along, blur);
       } else {
-        c = content(p + off + tng * k * along, blur);
+        c = content(p + par + off + tng * k * along, blur);
       }
       acc += c.rgb * w;
       wsum += w;
@@ -364,7 +368,7 @@ void main() {
   if (vol) {
     vec4 v = inside;
     // Fresnel reflection of the room, kept weak: the glass should read as clear, not glossy plastic.
-    vec3 refl = reflect(vec3(0.0, 0.0, -1.0), n3);
+    vec3 refl = reflect(vec3(u_tilt * 0.4, -1.0), n3); // the room in the rim slides with the lean
     float fres = (0.04 + 0.96 * pow(max(1.0 - n3.z, 0.0), 3.0)) * step(tr, 0.999);
     v = mix(v, vec4(studio(refl), 1.0), clamp(fres, 0.0, 1.0) * 0.55);
     // The seam where the rim meets the flat top: a highlight on the lit side, a shadow on the opposite side.
@@ -390,11 +394,12 @@ void main() {
 const UNIFORMS = [
   "u_sdf", "u_color", "u_texSize", "u_halfPx", "u_n", "u_edge", "u_refract", "u_disp", "u_phase",
   "u_motion", "u_size", "u_tint", "u_sideMix", "u_sideTwo", "u_angle", "u_spread", "u_liquid", "u_volume", "u_depth", "u_bg", "u_mode",
-  "u_sound", "u_ring", "u_bands", "u_drops",
+  "u_sound", "u_ring", "u_bands", "u_drops", "u_tilt",
 ];
 const SILENT = [0, 0, 0, 0];
 const NO_BANDS = new Float32Array(8);
 const NO_DROPS = new Float32Array(16);
+const STILL = [0, 0];
 
 export class GlassRenderer {
   canvas;
@@ -506,6 +511,7 @@ export class GlassRenderer {
     gl.uniform4fv(this.loc.u_ring, params.ring ?? SILENT);
     gl.uniform1fv(this.loc.u_bands, params.bands ?? NO_BANDS);
     gl.uniform4fv(this.loc.u_drops, params.drops ?? NO_DROPS);
+    gl.uniform2fv(this.loc.u_tilt, params.tilt ?? STILL);
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
