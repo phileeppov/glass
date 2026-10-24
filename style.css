@@ -456,6 +456,24 @@ fieldset {
   display: flex;
   flex-wrap: wrap;
 }
+/* Look, Sound, Export: the panel in three parts, each opened by its name over a hairline. No boxes, the order is unchanged. */
+.group {
+  margin: 6px 0 -2px;
+  padding: 14px 0 0;
+  border-top: 0.5px solid color-mix(in srgb, var(--color-black) 10%, transparent);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.04em;
+}
+/* For screen readers only: the group name already says it on screen. */
+.sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
 /* Group and toggle labels are medium: they are names. */
 legend,
 .check span {

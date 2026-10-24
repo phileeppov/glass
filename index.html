@@ -45,6 +45,7 @@
         </div>
         <p class="hint">Or drop an SVG or PNG anywhere. From Figma: Copy as SVG, then paste.</p>
 
+        <h2 class="group">Look</h2>
         <fieldset class="presets">
           <legend>Presets</legend>
           <div class="seg">
@@ -79,17 +80,6 @@
             <label><input type="radio" name="background" value="none" /><span>None</span></label>
           </div>
         </fieldset>
-        <fieldset>
-          <legend>Sound <span class="new" data-new="sound" hidden>New</span></legend>
-          <div class="seg">
-            <label><input type="radio" name="sound" value="off" checked /><span>Off</span></label>
-            <label><input type="radio" name="sound" value="demo" /><span>Demo</span></label>
-            <label><input type="radio" name="sound" value="mic" /><span>Mic</span></label>
-            <label><input type="radio" name="sound" value="track" /><span>Track</span></label>
-          </div>
-        </fieldset>
-        <input type="file" class="track-input" accept="audio/*,.mp3,.m4a,.aac,.wav,.ogg,.flac" data-track tabindex="-1" aria-label="Pick a track" />
-
         <details class="advanced" data-advanced>
           <summary>Advanced</summary>
           <div class="adv-body">
@@ -127,6 +117,19 @@
           </div>
         </details>
 
+        <h2 class="group">Sound <span class="new" data-new="sound" hidden>New</span></h2>
+        <fieldset>
+          <legend class="sr">Sound</legend>
+          <div class="seg">
+            <label><input type="radio" name="sound" value="off" checked /><span>Off</span></label>
+            <label><input type="radio" name="sound" value="demo" /><span>Demo</span></label>
+            <label><input type="radio" name="sound" value="mic" /><span>Mic</span></label>
+            <label><input type="radio" name="sound" value="track" /><span>Track</span></label>
+          </div>
+        </fieldset>
+        <input type="file" class="track-input" accept="audio/*,.mp3,.m4a,.aac,.wav,.ogg,.flac" data-track tabindex="-1" aria-label="Pick a track" />
+
+        <h2 class="group">Export</h2>
         <fieldset class="formats">
           <legend>Image <span class="new" data-new="image" hidden>New</span></legend>
           <div class="seg">
