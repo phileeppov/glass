@@ -171,6 +171,11 @@ h1 {
   outline: 2px solid var(--ink);
   outline-offset: 2px;
 }
+.look {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
 /* The die rolls a third of a turn on every tap. */
 .soft svg {
   flex: none;

@@ -839,6 +839,62 @@ function randomize() {
 
 for (const button of root.querySelectorAll("[data-random]")) button.addEventListener("click", randomize);
 
+// --- Link to a look ---
+
+// The settings travel in the link's hash, under short keys with three decimals. The logo never does:
+// "Your logo never leaves your browser" stays true for links too.
+const LOOK = {
+  ranges: { r: "refraction", b: "liquid", s: "size", d: "dispersion", e: "edge", a: "angle", l: "spread", m: "motion", t: "thickness" },
+  radios: { bg: "background", sd: "sides", sh: "shape", c: "color" },
+  checks: { v: "volume", sp: "spin" },
+};
+
+function lookHash() {
+  const q = new URLSearchParams();
+  for (const [k, name] of Object.entries(LOOK.ranges)) q.set(k, String(+Number(root.querySelector(`input[name=${name}]`).value).toFixed(3)));
+  for (const [k, name] of Object.entries(LOOK.radios)) q.set(k, root.querySelector(`input[name=${name}]:checked`)?.value ?? "");
+  for (const [k, name] of Object.entries(LOOK.checks)) q.set(k, root.querySelector(`input[name=${name}]`).checked ? "1" : "0");
+  return q.toString();
+}
+
+// Only known keys and values are taken, so a mangled link falls back to the defaults instead of breaking the page.
+function readLook(hash) {
+  const q = new URLSearchParams(hash.replace(/^#/, ""));
+  const look = { ranges: {}, radios: {}, checks: {} };
+  let found = false;
+  for (const [k, name] of Object.entries(LOOK.ranges)) {
+    const v = Number(q.get(k));
+    if (q.has(k) && Number.isFinite(v)) (look.ranges[name] = v), (found = true);
+  }
+  for (const [k, name] of Object.entries(LOOK.radios)) {
+    const v = q.get(k);
+    if (v && [...root.querySelectorAll(`input[name=${name}]`)].some((el) => el.value === v)) (look.radios[name] = v), (found = true);
+  }
+  for (const [k, name] of Object.entries(LOOK.checks)) if (q.has(k)) (look.checks[name] = q.get(k) === "1"), (found = true);
+  return found ? look : null;
+}
+
+function openLook() {
+  const look = readLook(location.hash);
+  if (!look) return;
+  applyLook(look);
+  for (const input of root.querySelectorAll("input[name=preset]")) input.checked = false;
+}
+
+async function copyLink() {
+  const url = `${location.origin}${location.pathname}#${lookHash()}`;
+  history.replaceState(null, "", url);
+  try {
+    await navigator.clipboard.writeText(url);
+    say("Link copied. It carries the look, not your logo.");
+  } catch {
+    say("Couldn't copy. The link is in the address bar.");
+  }
+}
+
+for (const button of root.querySelectorAll("[data-link]")) button.addEventListener("click", copyLink);
+addEventListener("hashchange", openLook);
+
 // Advanced remembers whether it's open, per visitor, in their own browser.
 const advanced = root.querySelector("[data-advanced]");
 try {
@@ -1136,4 +1192,6 @@ function hexToRgb(hex) {
   return [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16) / 255);
 }
 
+// A shared link opens on its look; the logo is the demo ☺ until you add your own.
+openLook();
 loadSvg(DEMO_SVG).then(kick);
