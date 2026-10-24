@@ -27,6 +27,7 @@ const shareButton = root.querySelector("[data-share]");
 const trackInput = root.querySelector("[data-track]");
 const textInput = root.querySelector("[data-text]");
 const caption = root.querySelector("[data-caption]");
+const afterBox = root.querySelector("[data-after]");
 
 const tokens = getComputedStyle(document.documentElement);
 const BG = {
@@ -557,12 +558,14 @@ let textTimer = 0;
 textInput.addEventListener("input", () => {
   clearTimeout(textTimer);
   textTimer = setTimeout(() => loadText(textInput.value.trim()), 180);
+  tried("text");
 });
 for (const sample of root.querySelectorAll("[data-sample]")) {
   sample.addEventListener("click", () => {
     clearTimeout(textTimer);
     textInput.value = sample.dataset.sample;
     loadText(sample.dataset.sample);
+    tried("text");
   });
 }
 
@@ -605,10 +608,16 @@ function showCaption() {
   const own = mode === "mic" || mode === "track" ? "Your logo and sound never leave your browser." : "Your logo never leaves your browser.";
   caption.textContent = `${imageFormat().note} · ${video} · ${own}`;
 }
-for (const input of root.querySelectorAll("input[name=image]")) input.addEventListener("change", showCaption);
+for (const input of root.querySelectorAll("input[name=image]")) {
+  input.addEventListener("change", () => {
+    showCaption();
+    tried("image");
+  });
+}
 
 async function setSound(mode, file) {
   showSound(mode);
+  if (mode !== "off") tried("sound");
   try {
     if (mode === "demo") await sound.demo();
     else if (mode === "mic") await sound.mic();
@@ -717,6 +726,7 @@ tiltButton.addEventListener("click", async () => {
     if ((await DeviceOrientationEvent.requestPermission()) !== "granted") throw new Error("denied");
     addEventListener("deviceorientation", onOrient);
     tiltButton.hidden = true;
+    tried("tilt");
   } catch {
     say("Motion access is off. Allow it for this site in Safari settings to tilt the glass.");
   }
@@ -839,6 +849,7 @@ function randomLook() {
 let rolls = 0;
 function randomize() {
   applyLook(randomLook());
+  tried("random");
   for (const input of root.querySelectorAll("input[name=preset]")) input.checked = false;
   rolls++;
   for (const button of root.querySelectorAll("[data-random]")) button.style.setProperty("--turn", `${rolls * 120}deg`);
@@ -889,6 +900,7 @@ function openLook() {
 }
 
 async function copyLink() {
+  tried("link");
   const url = `${location.origin}${location.pathname}#${lookHash()}`;
   history.replaceState(null, "", url);
   try {
@@ -1164,6 +1176,7 @@ const ios =
 let lastExport = null;
 
 async function save(blob, name) {
+  afterBox.hidden = false;
   const file = new File([blob], name, { type: blob.type });
   if (!ios || !navigator.canShare?.({ files: [file] })) return download(blob, name);
   lastExport = { blob, name, video: blob.type.startsWith("video/") };
@@ -1258,6 +1271,35 @@ function hexToRgb(hex) {
   return [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16) / 255);
 }
 
+
+// --- New ---
+
+// "New" tags over what this release added. A tag goes once you've tried that feature (remembered in this browser only),
+// and all of them go on NEW_UNTIL. They are temporary, so they have a date: two weeks after launch.
+const NEW_UNTIL = Date.parse("2026-11-15"); // set to the launch day plus 14 days when the launch date is known
+let seen = [];
+try {
+  seen = JSON.parse(localStorage.getItem("glass-tried") ?? "[]");
+} catch {
+  // Storage unavailable: the tags just show until the date.
+}
+
+function showNew() {
+  const over = Date.now() > NEW_UNTIL;
+  for (const tag of root.querySelectorAll("[data-new]")) tag.hidden = over || seen.includes(tag.dataset.new);
+}
+
+function tried(feature) {
+  if (seen.includes(feature)) return;
+  seen.push(feature);
+  showNew();
+  try {
+    localStorage.setItem("glass-tried", JSON.stringify(seen));
+  } catch {
+    // Not saved: the tag comes back next visit, that's fine.
+  }
+}
+showNew();
 // A shared link opens on its look; the logo is the demo ☺ until you add your own.
 openLook();
 loadSvg(DEMO_SVG).then(kick);
