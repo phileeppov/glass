@@ -847,28 +847,28 @@ const PRESETS = {
     radios: { sides: "two", background: "light", shape: "squircle" },
     checks: { volume: true, spin: false, facets: false },
   },
-  // Flows into all corners, rainbow patches.
+  // Flows into all corners, calmly.
   melt: {
-    ranges: { size: 0.6, refraction: 1.2, dispersion: 0.9, edge: 0.22, liquid: 0.85, thickness: 0.45, motion: 0.7 },
+    ranges: { size: 0.6, refraction: 1.1, dispersion: 0.85, edge: 0.22, liquid: 0.85, thickness: 0.45, motion: 0.5 },
     radios: { sides: "all", background: "light", shape: "squircle" },
     checks: { volume: true, spin: false, facets: false },
   },
-  // Thin rainbow along the whole rim, logo almost untouched, without a heavy frame in its color.
+  // Cut glass: the logo untouched, two clean facets with a thin rainbow along the whole rim.
   prism: {
-    ranges: { size: 0.62, refraction: 1.05, dispersion: 1, edge: 0.14, liquid: 0, thickness: 0.6, motion: 0.5 },
+    ranges: { size: 0.62, refraction: 1.1, dispersion: 1, edge: 0.17, liquid: 0, thickness: 0.6, motion: 0.5 },
     radios: { sides: "all", background: "light", shape: "squircle" },
-    checks: { volume: true, spin: false, facets: false },
+    checks: { volume: true, spin: false, facets: true },
   },
-  // Round lens, like the brand stamp.
+  // A cut round lens: rings, like a cut stone.
   lens: {
     ranges: { size: 0.6, refraction: 0.85, dispersion: 1, edge: 0.28, liquid: 0.15, thickness: 0.5, motion: 0.4 },
     radios: { sides: "all", background: "light", shape: "circle" },
-    checks: { volume: true, spin: false, facets: false },
+    checks: { volume: true, spin: false, facets: true },
   },
-  // Dark background; a dark logo turns white on its own.
+  // Studio on black: the light of the logo flows into two opposite corners. A dark logo turns white on its own.
   night: {
-    ranges: { size: 0.62, refraction: 1.3, dispersion: 1, edge: 0.2, liquid: 0.75, thickness: 0.6, motion: 0.5 },
-    radios: { sides: "all", background: "dark", shape: "squircle" },
+    ranges: { size: 0.64, refraction: 1.45, dispersion: 1, edge: 0.18, liquid: 0.75, angle: 45, spread: 0.6, thickness: 0.45, motion: 0.5 },
+    radios: { sides: "two", background: "dark", shape: "squircle" },
     checks: { volume: true, spin: false, facets: false },
   },
 };
@@ -956,28 +956,28 @@ for (const input of root.querySelectorAll("input[name=preset]")) {
   });
 }
 
-// Randomize: a look of its own, mixed within the ranges the presets live in, so it never comes out broken.
+// Randomize: a look of its own, mixed within the ranges the presets live in, so it never comes out broken or loud.
 // It eases in like a preset; no preset stays selected, since the look is custom.
 const pick = (a, b) => a + Math.random() * (b - a);
 const chance = (p) => Math.random() < p;
 
 function randomLook() {
   const sides = chance(0.5) ? "all" : chance(0.7) ? "two" : "one";
-  const pooled = chance(0.3); // a third of looks keep the logo whole, with only a rainbow rim
+  const pooled = chance(0.35); // a third of looks keep the logo whole, with only a rim; cut glass suits those best
   return {
     ranges: {
-      size: pick(0.56, 0.7),
-      refraction: pick(0.8, 1.5),
-      dispersion: pick(0.75, 1),
-      edge: pick(0.12, 0.3),
-      liquid: pooled ? pick(0, 0.2) : pick(0.5, 0.9),
+      size: pick(0.58, 0.68),
+      refraction: pick(1, 1.5),
+      dispersion: pick(0.85, 1),
+      edge: pick(0.14, 0.24),
+      liquid: pooled ? pick(0, 0.15) : pick(0.75, 0.88),
       angle: pick(0, 360),
-      spread: pick(0.3, 0.85),
-      thickness: pick(0.3, 0.7),
-      motion: pick(0.35, 0.7),
+      spread: pick(0.4, 0.75),
+      thickness: pick(0.3, 0.6),
+      motion: pick(0.4, 0.6),
     },
-    radios: { sides, background: chance(0.65) ? "light" : "dark", shape: chance(0.8) ? "squircle" : "circle" },
-    checks: { volume: chance(0.85), spin: sides !== "all" && chance(0.15), facets: false },
+    radios: { sides, background: chance(0.25) ? "dark" : "light", shape: chance(0.15) ? "circle" : "squircle" },
+    checks: { volume: true, spin: false, facets: pooled && chance(0.6) },
   };
 }
 

@@ -586,11 +586,13 @@ fieldset input:focus-visible + span {
   outline: 2px solid var(--ink);
   outline-offset: 1px;
 }
-/* Angle and spin only matter when sides are selected; thickness only when volume is on. */
-[data-volume="off"] .thick,
-[data-sides="all"] .directional {
+/* Thickness only matters when volume is on. Angle, length and spin only when sides are selected, so with All they're gone. */
+[data-volume="off"] .thick {
   opacity: 0.35;
   pointer-events: none;
+}
+[data-sides="all"] .directional {
+  display: none;
 }
 /* Checkboxes as toggles. */
 .check {
