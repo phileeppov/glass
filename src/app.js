@@ -725,10 +725,14 @@ for (const sample of root.querySelectorAll("[data-sample]")) {
 // A tap on a sample moves focus inside the field's own box, so that doesn't count as leaving.
 const logoIn = root.querySelector("[data-logo-in]");
 const typeBox = textInput.parentElement;
+const uploadKey = root.querySelector(".upload");
 const FOLDED = textInput.placeholder;
 function openText(open) {
   logoIn.classList.toggle("is-typing", open);
   textInput.placeholder = open ? textInput.dataset.openPlaceholder : FOLDED;
+  // Folded to its arrow, Upload says its name on hover.
+  if (open) uploadKey.title = uploadKey.textContent.trim();
+  else uploadKey.removeAttribute("title");
 }
 textInput.addEventListener("focus", () => openText(true));
 typeBox.addEventListener("focusout", (e) => {
@@ -1206,6 +1210,9 @@ root.addEventListener("input", clearPreset);
 root.addEventListener("change", clearPreset);
 
 // Figma's "Copy as SVG" copies text, so accept both text and an image from the clipboard.
+// A plain copy in Figma carries Figma's own format, which only Figma can read: then the status says how to copy instead,
+// at the moment it's needed rather than in a hint everyone reads.
+const FROM_FIGMA = "From Figma, use Copy as SVG, then paste.";
 document.addEventListener("paste", (e) => {
   const data = e.clipboardData;
   if (!data) return;
@@ -1224,6 +1231,8 @@ document.addEventListener("paste", (e) => {
     if (document.activeElement !== textInput) openText(false);
     if (autoColor) setColor("original");
     loadSvg(text, "paste");
+  } else if (!text && /\(fig(meta|ma)\)/.test(data.getData("text/html"))) {
+    say(FROM_FIGMA);
   }
 });
 

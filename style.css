@@ -281,8 +281,11 @@ h1 {
   text-align: left;
   cursor: text;
 }
+.is-typing .type input {
+  padding-left: 14px;
+}
 .is-typing .type input:placeholder-shown {
-  padding-right: 108px;
+  padding-right: 96px;
 }
 .is-typing .type input::placeholder {
   font-weight: 400;
@@ -299,10 +302,9 @@ h1 {
 .samples {
   position: absolute;
   top: 4px;
-  right: 4px;
+  right: 3px;
   bottom: 4px;
   display: flex;
-  gap: 2px;
   opacity: 0;
   visibility: hidden;
   transition: opacity 120ms ease-out, visibility 0s 120ms;
@@ -313,7 +315,7 @@ h1 {
   transition: opacity 200ms ease-out 160ms;
 }
 .samples button {
-  width: 32px;
+  width: 30px;
   padding: 0;
   background: none;
   box-shadow: none;
