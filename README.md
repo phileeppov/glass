@@ -1,35 +1,23 @@
 # Glass
 
-Drop a logo, get it back as a glass app icon. Live at [phileeppov.com/glass](https://phileeppov.com/glass), where changes land first. I designed it and built it with Claude Code.
+Play your logo like a handpan. Each tap rings a note, and music moves the glass on the beat.
 
-![The smiley logo turns into a glass app icon, moves through three presets and settles back flat](media/glass.gif)
+![A cursor drops a flower logo onto the Glass page, clicks the glass four times, tries three presets on hover and brings the smiley back through the text field](media/glass.webp)
 
-Upload an SVG, PNG or JPG, drop it on the page, paste one from Figma, or type a letter, a word or an emoji. A logo on white loses the white background, and a square photo or app icon fills the glass.
+Try it at [phileeppov.com/glass](https://phileeppov.com/glass). Upload an SVG, PNG or JPG, paste from Figma, or type a word or an emoji, then pick one of five presets or roll a random look. Out comes an icon: a PNG up to 2048 px or a 1080p video, with sound if it's on.
 
-Out comes a 1080p video, square or 16:9, or a PNG: 1024 or 2048 px, an avatar for round profile pictures, or a square App Store icon. Everything runs in the browser, so the logo never leaves it.
-
-Turn on Sound and the glass reacts to the Lofi loop, your mic or your own track: it breathes with the loudness, the beat pulls the logo into the rim, highs widen the fringe and pitch turns the light. A track starts on its loudest 12 seconds, and the strip under Sound picks another part. The video keeps the sound too, 12 seconds of it.
-
-The glass is also an instrument. Tap it and it plays a note in key with the loop, rest a finger to damp the note, draw one across to make it sing. It stays silent when the mic or a track is on, and over the loop the video records what you play.
-
-## How it works
-
-One fragment shader in WebGL 1: the logo becomes a signed distance field ([`src/sdf.js`](src/sdf.js)), so where the glass magnifies it, the edge stays smooth instead of going blocky. The rim pulls the logo out to the edge, and each pixel there averages 32 samples across the spectrum, every color bent a little differently, which is where the rainbow fringe comes from ([`src/renderer.js`](src/renderer.js)). The Facets switch in Advanced cuts the rim into two flat faces, so the logo's edge shows twice, with a sharp step between them.
-
-Sound goes through Web Audio: eight frequency bands, 40 Hz to 12 kHz, each tied to its own stretch of the rainbow fringe, plus the beats ([`src/sound.js`](src/sound.js)). The Lofi loop is synthesized in the browser, and so are the notes you play on the glass ([`src/tune.js`](src/tune.js)).
-
-Each thing you do fires a `glass:tell` event, like `png` or `sound:mic`, and nothing in this repo listens to them. On phileeppov.com a small script counts them by name, never a logo, a file name or a slider value.
+The glass is a single fragment shader and the sound is Web Audio, with the lofi loop and the notes synthesized in the browser. Your logo stays on your device. I designed it and built it with Claude Code.
 
 ## Run it
 
-No build step and no dependencies. From the repo folder, start any static server, for example:
+No build step. Serve the folder with any static server, for example:
 
 ```bash
 python3 -m http.server 8000
 ```
 
-Then open http://localhost:8000 (on Windows the command is `python`). Opening `index.html` straight from disk won't work: most browsers block ES modules on `file://`.
+Then open http://localhost:8000. On Windows the command is `python`. Opened straight from disk, the page shows no glass: most browsers block ES modules on `file://`.
 
-## License
+This repo sends nothing anywhere. On phileeppov.com a small script counts events like `png` or `sound:mic`, never a logo or a file.
 
-MIT for the code. The Onest font in `fonts/` is under the SIL Open Font License, see [`fonts/OFL-Onest.txt`](fonts/OFL-Onest.txt).
+MIT for the code. The Onest font in `fonts/` is under the [SIL Open Font License](fonts/OFL-Onest.txt).
