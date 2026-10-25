@@ -50,6 +50,7 @@ const params = {
   liquid: 0,
   volume: 0.5,
   depth: 0,
+  facets: false,
   background: "light",
   bg: BG.light,
 };
@@ -63,7 +64,8 @@ const applyVolume = () => {
   params.depth = volumeOn ? 1 : 0;
 };
 let logoColor = "original";
-let logoLuma = 0; // average logo luminance 0..1; a dark logo on a dark background is turned white
+let logoLuma = 0; // average logo luminance 0..1; a dark logo on a dark background is turned white, a white one on light black
+let fill = false; // a photo or an icon on its own plate: it covers the glass edge to edge instead of sitting on it
 let autoColor = false; // the color was switched by the code, not by the user
 let recording = false;
 const sound = new Sound();
@@ -140,7 +142,8 @@ async function loadUrl(url) {
     return say("Couldn't open that image.");
   }
   try {
-    buildLogo(img, trim(img));
+    const source = unplate(img);
+    buildLogo(source, trim(source));
   } catch {
     // For example, an SVG with <foreignObject> (background blur from Figma): the browser won't let us read the pixels.
     return say("Couldn't open that image.");
@@ -191,7 +194,42 @@ async function loadText(text) {
   kick();
 }
 
+// A logo on a plain background, a JPG or a PNG exported on white, comes back with that background keyed out,
+// so the glass sees the mark and not a white card. The background is the border color, when the border is one color.
+// Other opaque pictures, photos for example, come back as they are and fill the glass (see buildLogo).
+function unplate(img) {
+  const iw = img.naturalWidth || img.width;
+  const ih = img.naturalHeight || img.height;
+  const k = Math.min(1, 1024 / Math.max(iw, ih));
+  const w = Math.max(1, Math.round(iw * k));
+  const h = Math.max(1, Math.round(ih * k));
+  const c = document.createElement("canvas");
+  c.width = w;
+  c.height = h;
+  const ctx = c.getContext("2d", { willReadFrequently: true });
+  ctx.drawImage(img, 0, 0, w, h);
+  const data = ctx.getImageData(0, 0, w, h);
+  const px = data.data;
+  for (let i = 3; i < px.length; i += 4) if (px[i] < 250) return img; // has transparency: a logo as it is
+  const border = [];
+  for (let x = 0; x < w; x++) border.push(x, (h - 1) * w + x);
+  for (let y = 1; y < h - 1; y++) border.push(y * w, y * w + w - 1);
+  const bg = [0, 1, 2].map((ch) => border.reduce((sum, i) => sum + px[i * 4 + ch], 0) / border.length / 255);
+  const dist = (i) => Math.hypot(px[i] / 255 - bg[0], px[i + 1] / 255 - bg[1], px[i + 2] / 255 - bg[2]);
+  if (border.filter((i) => dist(i * 4) < 0.08).length < border.length * 0.92) return img; // a busy border: a photo
+  for (let i = 0; i < px.length; i += 4) {
+    const t = Math.min(1, Math.max(0, (dist(i) - 0.04) / 0.1));
+    const a = t * t * (3 - 2 * t);
+    // The edge pixels were blended with the background; take the background back out of their color.
+    for (let ch = 0; ch < 3; ch++) px[i + ch] = a ? Math.min(255, Math.max(0, (bg[ch] + (px[i + ch] / 255 - bg[ch]) / a) * 255)) : 0;
+    px[i + 3] = a * 255;
+  }
+  ctx.putImageData(data, 0, 0);
+  return c;
+}
+
 // Trim empty margins around the logo: the effect only shows when the artwork reaches the rim.
+// Also says how much of the trimmed box is solid: nearly all of it means a photo or an icon on its own plate.
 function trim(img) {
   // An <img> has natural size; a canvas with typed text only has its own.
   const iw = img.naturalWidth || img.width;
@@ -200,10 +238,12 @@ function trim(img) {
   const w = Math.max(1, Math.round(iw * k));
   const h = Math.max(1, Math.round(ih * k));
   const data = pixels(w, h, (ctx) => ctx.drawImage(img, 0, 0, w, h));
-  let x0 = w, y0 = h, x1 = -1, y1 = -1;
+  let x0 = w, y0 = h, x1 = -1, y1 = -1, solid = 0;
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
-      if (data[(y * w + x) * 4 + 3] > 8) {
+      const a = data[(y * w + x) * 4 + 3];
+      if (a > 128) solid++;
+      if (a > 8) {
         if (x < x0) x0 = x;
         if (x > x1) x1 = x;
         if (y < y0) y0 = y;
@@ -211,12 +251,18 @@ function trim(img) {
       }
     }
   }
-  if (x1 < 0) return { x: 0, y: 0, w: iw, h: ih };
-  return { x: x0 / k, y: y0 / k, w: (x1 - x0 + 1) / k, h: (y1 - y0 + 1) / k };
+  if (x1 < 0) return { x: 0, y: 0, w: iw, h: ih, solid: 0 };
+  return { x: x0 / k, y: y0 / k, w: (x1 - x0 + 1) / k, h: (y1 - y0 + 1) / k, solid: solid / ((x1 - x0 + 1) * (y1 - y0 + 1)) };
 }
 
 // Two textures: a distance field for the shape, and color extended past the edge so the blurred rim doesn't darken.
+// A solid picture fills the glass: its middle square is taken, and the size never goes under edge to edge (see target).
 function buildLogo(img, crop) {
+  fill = crop.solid > 0.9;
+  if (fill) {
+    const side = Math.min(crop.w, crop.h);
+    crop = { x: crop.x + (crop.w - side) / 2, y: crop.y + (crop.h - side) / 2, w: side, h: side };
+  }
   const k = (LAYER * LOGO_FILL) / Math.max(crop.w, crop.h);
   const w = crop.w * k;
   const h = crop.h * k;
@@ -296,7 +342,7 @@ function target(st) {
     dispersion: st.dispersion,
     edge: st.edge,
     motion: st.motion,
-    size: st.size,
+    size: fill ? Math.max(st.size, 1.02) : st.size,
     tint: lastTint,
     tintMix: st.tint ? 1 : 0,
     sideMix: st.sides === "all" ? 0 : 1,
@@ -310,6 +356,7 @@ function target(st) {
     bg: st.bg,
     frame: ICON_SCALE, // share of the frame the icon takes; trying Avatar or App Store on hover eases it to 1
     shadow: 1,
+    facet: st.facets ? 1 : 0,
   };
 }
 
@@ -322,7 +369,7 @@ function withTurn(p, phase) {
 // Easing: each on-screen value chases its target with time constant EASE,
 // so the glass flows from square to circle and from one set of sides to another instead of jumping.
 const EASE = 90; // ms
-const EASED = ["n", "refraction", "dispersion", "edge", "motion", "size", "tintMix", "sideMix", "sideTwo", "angle", "spread", "liquid", "volume", "depth", "frame", "shadow"];
+const EASED = ["n", "refraction", "dispersion", "edge", "motion", "size", "tintMix", "sideMix", "sideTwo", "angle", "spread", "liquid", "volume", "depth", "facet", "frame", "shadow"];
 let shown = null;
 
 function ease(goal, dt) {
@@ -497,6 +544,14 @@ spinInput.addEventListener("change", () => {
   kick();
 });
 
+// Facets: cut glass instead of a rounded rim.
+const facetsInput = root.querySelector("input[name=facets]");
+params.facets = facetsInput.checked;
+facetsInput.addEventListener("change", () => {
+  params.facets = facetsInput.checked;
+  kick();
+});
+
 const volumeInput = root.querySelector("input[name=volume]");
 const syncVolume = () => {
   volumeOn = volumeInput.checked;
@@ -544,10 +599,14 @@ applyColor();
 
 // A dark logo disappears on a dark background: turn it white, and back when the background is light again.
 // Decided by the logo's own luminance, not just for the demo smiley.
+// A white logo disappears on light glass the same way, so it turns black there. A photo keeps its own colors.
 function fitColorToBackground() {
+  if (fill) return;
   const dark = params.background === "dark";
+  const pale = logoLuma > 0.85;
   if (dark && (logoColor === "black" || (logoColor === "original" && logoLuma < 0.3))) setColor("white", true);
-  else if (!dark && logoColor === "white") setColor(autoColor ? "original" : "black", true);
+  else if (!dark && logoColor === "white") setColor(autoColor && !pale ? "original" : "black", true);
+  else if (!dark && logoColor === "original" && pale) setColor("black", true);
 }
 
 function setColor(c, auto = false) {
@@ -786,41 +845,42 @@ const PRESETS = {
   studio: {
     ranges: { size: 0.66, refraction: 1.5, dispersion: 0.95, edge: 0.18, liquid: 0.75, angle: 45, spread: 0.6, thickness: 0.35, motion: 0.5 },
     radios: { sides: "two", background: "light", shape: "squircle" },
-    checks: { volume: true, spin: false },
+    checks: { volume: true, spin: false, facets: false },
   },
   // Flows into all corners, rainbow patches.
   melt: {
     ranges: { size: 0.6, refraction: 1.2, dispersion: 0.9, edge: 0.22, liquid: 0.85, thickness: 0.45, motion: 0.7 },
     radios: { sides: "all", background: "light", shape: "squircle" },
-    checks: { volume: true, spin: false },
+    checks: { volume: true, spin: false, facets: false },
   },
   // Thin rainbow along the whole rim, logo almost untouched, without a heavy frame in its color.
   prism: {
     ranges: { size: 0.62, refraction: 1.05, dispersion: 1, edge: 0.14, liquid: 0, thickness: 0.6, motion: 0.5 },
     radios: { sides: "all", background: "light", shape: "squircle" },
-    checks: { volume: true, spin: false },
+    checks: { volume: true, spin: false, facets: false },
   },
   // Round lens, like the brand stamp.
   lens: {
     ranges: { size: 0.6, refraction: 0.85, dispersion: 1, edge: 0.28, liquid: 0.15, thickness: 0.5, motion: 0.4 },
     radios: { sides: "all", background: "light", shape: "circle" },
-    checks: { volume: true, spin: false },
+    checks: { volume: true, spin: false, facets: false },
   },
   // Dark background; a dark logo turns white on its own.
   night: {
     ranges: { size: 0.62, refraction: 1.3, dispersion: 1, edge: 0.2, liquid: 0.75, thickness: 0.6, motion: 0.5 },
     radios: { sides: "all", background: "dark", shape: "squircle" },
-    checks: { volume: true, spin: false },
+    checks: { volume: true, spin: false, facets: false },
   },
 };
 // A preset as shader numbers, without touching the inputs: for the thumbnails on the preset keys and for trying a preset on hover.
-// The logo color follows the same rule as the page: a dark logo turns white on a dark background.
+// The logo color follows the same rule as the page: a dark logo turns white on a dark background, a white one black on light.
 function presetLook(name, still = false) {
   const preset = PRESETS[name];
   const background = preset.radios.background;
   const dark = background === "dark";
-  const white = dark && (logoColor === "black" || logoColor === "white" || (logoColor === "original" && logoLuma < 0.3));
-  const tint = white ? [1, 1, 1] : logoColor === "black" && !dark ? hexToRgb(tokens.getPropertyValue("--color-black")) : logoColor === "white" && !autoColor ? [1, 1, 1] : null;
+  const white = !fill && dark && (logoColor === "black" || logoColor === "white" || (logoColor === "original" && logoLuma < 0.3));
+  const black = !dark && (logoColor === "black" || (!fill && logoColor === "original" && logoLuma > 0.85));
+  const tint = white ? [1, 1, 1] : black ? hexToRgb(tokens.getPropertyValue("--color-black")) : logoColor === "white" && !autoColor ? [1, 1, 1] : null;
   const { angle = angleDeg, thickness: slab = thickness, motion = params.motion, ...ranges } = preset.ranges;
   const keepTint = lastTint;
   const look = target({
@@ -834,6 +894,7 @@ function presetLook(name, still = false) {
     tint,
     volume: slab,
     depth: preset.checks.volume ? 1 : 0,
+    facets: preset.checks.facets,
   });
   lastTint = keepTint; // target() remembers the last tint for easing; a thumbnail mustn't change it
   return { ...look, angle: (angle / 180) * Math.PI };
@@ -916,7 +977,7 @@ function randomLook() {
       motion: pick(0.35, 0.7),
     },
     radios: { sides, background: chance(0.65) ? "light" : "dark", shape: chance(0.8) ? "squircle" : "circle" },
-    checks: { volume: chance(0.85), spin: sides !== "all" && chance(0.15) },
+    checks: { volume: chance(0.85), spin: sides !== "all" && chance(0.15), facets: false },
   };
 }
 
@@ -959,7 +1020,7 @@ if (matchMedia("(hover: hover) and (pointer: fine)").matches) {
 const LOOK = {
   ranges: { r: "refraction", b: "liquid", s: "size", d: "dispersion", e: "edge", a: "angle", l: "spread", m: "motion", t: "thickness" },
   radios: { bg: "background", sd: "sides", sh: "shape", c: "color" },
-  checks: { v: "volume", sp: "spin" },
+  checks: { v: "volume", sp: "spin", f: "facets" },
 };
 
 function lookHash() {

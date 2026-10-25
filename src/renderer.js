@@ -25,6 +25,7 @@
  * @property {number} liquid 0..1, the smear flows into the edge, waves move through the glass
  * @property {number} volume slab thickness, 0..1
  * @property {number} depth 0: flat glass, 1: with volume
+ * @property {number} facet 0: a rounded rim, 1: cut glass, two flat facets with crisp edges
  * @property {Background} background
  * @property {[number, number, number]} bg background color for light/dark, 0..1
  * @property {[number, number, number, number]} [sound] loudness, bass, beat, unused; all 0 or absent when sound is off
@@ -78,6 +79,7 @@ uniform float u_spread;     // side zone width: 0 is a narrow spot, 1 is almost 
 uniform float u_liquid;     // 0: smear as a band at the rim, 1: the glyph flows into the edge, waves move through the glass
 uniform float u_volume;     // slab thickness, 0..1
 uniform float u_depth;      // 0: flat glass, 1: with volume; continuous so the volume fades out instead of popping off
+uniform float u_facet;      // 0: a rounded rim, 1: cut glass; continuous so a preset eases from one to the other
 uniform vec3 u_bg;
 uniform float u_mode;       // 0 light, 1 dark, 2 transparent
 uniform vec4 u_sound;       // x loudness, y bass; all 0 when sound is off, and then nothing below changes
@@ -246,6 +248,11 @@ void main() {
   // Profile: the offset quickly reaches full strength and holds it across the whole band,
   // so the rim shows a solid band of glyph pulled from far away, with the fringe on its inner boundary.
   float rimPull = smoothstep(0.0, 0.65, e);
+  // Cut glass: two flat facets instead of the rounded profile. Each shifts the logo by its own constant amount,
+  // so the rim shows two clean copies of the edge, and the step between them is a sharp line.
+  float facetAA = 1.2 * px / max(u_edge, 1e-3);
+  float facets = 0.5 * smoothstep(-facetAA, facetAA, e - 0.02) + 0.5 * smoothstep(-facetAA, facetAA, e - 0.5);
+  rimPull = mix(rimPull, facets, u_facet);
   // Liquid: the falloff reaches deep inside and becomes gentle, so the image doesn't fold
   // into a separate arc but stretches continuously to the edge: the glyph flows into the rim as a bridge.
   float flowW = mix(u_edge, 0.62, u_liquid);
@@ -283,6 +290,9 @@ void main() {
   float rimW = 0.05 + 0.2 * u_volume;
   float tr = clamp(depth / rimW, 0.0, 1.0);
   float r = 1.0 - tr;
+  // Cut glass turns the slab's rounded rim into the same two facets.
+  float rAA = 1.2 * px / rimW;
+  r = mix(r, 0.5 * smoothstep(-rAA, rAA, r - 0.02) + 0.35 * smoothstep(-rAA, rAA, r - 0.5), u_facet);
   float slope = r / max(sqrt(1.0 - r * r), 0.08);
   vec3 n3 = normalize(vec3(nrm * slope, 1.0));
   float h = 0.1 + 0.4 * u_volume;
@@ -300,7 +310,7 @@ void main() {
   float foot = px * texelsPerUnit * 1.5;
 #endif
   float reach = length(offC);
-  float blur = max(foot, 0.35) + reach * 0.035 * texelsPerUnit;
+  float blur = max(foot, 0.35) + reach * 0.022 * texelsPerUnit;
 
   // Color order in the fringe. A black glyph on light and a light glyph on dark give complementary
   // colors; on dark the fringe came out yellow-orange. We flip the order so it is the same on every background.
@@ -330,7 +340,7 @@ void main() {
       // A small spread along the rim softens hard cuts in the glyph.
       float along = (fract(x * 7.31 + jitter) - 0.5) * 0.25;
       float spread = (0.5 - x) * order * (1.0 + 0.5 * tone);
-      vec2 off = -dir * (k + kDisp * u_disp * spread * 0.9) + ripple + wake;
+      vec2 off = -dir * (k + kDisp * u_disp * spread * 0.75) + ripple + wake;
       vec4 c;
       if (vol) {
         off += throughSlab(n3, ior + u_disp * 0.3 * spread, h) * side * wave * u_depth;
@@ -345,9 +355,10 @@ void main() {
     }
     float a = aacc / float(TAPS);
     inside = vec4(min(acc / wsum, vec3(a)), a);
-    // Richer color: averaging the samples desaturates the fringe, so restore saturation, only where there is smear.
+    // Averaging the samples desaturates the fringe, so give back some saturation, only where there is smear.
+    // Just some: past this colored logos and photos turn acid.
     float luma = dot(inside.rgb, vec3(0.299, 0.587, 0.114));
-    inside.rgb = clamp(luma + (inside.rgb - luma) * 1.7, 0.0, a);
+    inside.rgb = clamp(luma + (inside.rgb - luma) * 1.35, 0.0, a);
   }
 
   // Ripple crests catch the light on one side and shade the other.
@@ -370,6 +381,12 @@ void main() {
     v = mix(v, vec4(1.0), seam * max(toLight, 0.0) * 0.6);
     v.rgb *= 1.0 - seam * max(-toLight, 0.0) * 0.2;
     v = mix(v, vec4(1.0), glint * (0.25 + 0.5 * lit));
+    // Facet edges catch the light as fine lines, brighter on the side facing it.
+    if (u_facet > 0.001) {
+      float edgeLine = exp(-sq((e - 0.5) * u_edge / (1.1 * px)));
+      float rimLine = exp(-sq(((1.0 - tr) - 0.5) * rimW / (1.1 * px)));
+      v = mix(v, vec4(1.0), u_facet * (0.35 * edgeLine + 0.45 * rimLine) * (0.4 + 0.6 * max(toLight, 0.0)));
+    }
     // The volume dissolves into flat glass with u_depth, with no jump at the end.
     inside = mix(flatRim, v, u_depth);
   } else {
@@ -386,7 +403,7 @@ void main() {
 
 const UNIFORMS = [
   "u_sdf", "u_color", "u_texSize", "u_halfPx", "u_n", "u_edge", "u_refract", "u_disp", "u_phase",
-  "u_motion", "u_size", "u_tint", "u_sideMix", "u_sideTwo", "u_angle", "u_spread", "u_liquid", "u_volume", "u_depth", "u_bg", "u_mode",
+  "u_motion", "u_size", "u_tint", "u_sideMix", "u_sideTwo", "u_angle", "u_spread", "u_liquid", "u_volume", "u_depth", "u_facet", "u_bg", "u_mode",
   "u_sound", "u_bands", "u_drops", "u_tilt", "u_zoom", "u_shadow",
 ];
 const SILENT = [0, 0, 0, 0];
@@ -501,6 +518,7 @@ export class GlassRenderer {
     gl.uniform1f(this.loc.u_liquid, params.liquid);
     gl.uniform1f(this.loc.u_volume, params.volume);
     gl.uniform1f(this.loc.u_depth, params.depth);
+    gl.uniform1f(this.loc.u_facet, params.facet ?? 0);
     gl.uniform3fv(this.loc.u_bg, params.bg);
     gl.uniform1f(this.loc.u_mode, params.background === "light" ? 0 : params.background === "dark" ? 1 : 2);
     gl.uniform4fv(this.loc.u_sound, params.sound ?? SILENT);
