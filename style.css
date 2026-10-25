@@ -1261,8 +1261,31 @@ button:disabled {
     grid-template-areas: "intro" "stage" "controls" "foot";
     grid-template-rows: none;
   }
+  /* On a phone the glass is the headline: the name and the line sit in one quiet row over it. */
   .intro {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    column-gap: 7px;
     padding: 0;
+  }
+  h1 {
+    margin: 0;
+    font-size: 17px;
+    font-weight: 600;
+    line-height: 1.3;
+    letter-spacing: -0.045em;
+  }
+  .intro p {
+    font-size: 15px;
+  }
+  .intro p:not(.whatsnew) {
+    color: color-mix(in srgb, var(--ink) 60%, transparent);
+  }
+  .intro .whatsnew {
+    flex-basis: 100%;
+    margin-top: 4px;
+    font-size: 12px;
   }
   /* On phones the icon sticks to the top of the screen, and the settings scroll under it. */
   .stage-wrap {
@@ -1281,8 +1304,9 @@ button:disabled {
     height: auto;
     display: block;
   }
+  /* The glass takes the width, as long as Upload still shows above the dock with the browser's bars out (svh). */
   .stage {
-    width: min(100%, 38vh);
+    width: min(100%, 100svh - 330px);
     margin-inline: auto;
   }
   .looks {
