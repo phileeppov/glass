@@ -84,6 +84,39 @@ h1 {
   grid-area: stage;
   align-self: stretch;
   position: relative;
+  isolation: isolate;
+}
+/* With a dark background the whole stage goes dark, out to the page edges (past the body's 20 / 24 px padding): the glass
+   hangs in the dark instead of sitting on a black card. Trying a dark look on with the mouse previews it (app.js sets
+   data-tone from what the stage shows). The panel stays light. */
+.stage-wrap::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: -20px 0 -20px -24px;
+  background: var(--color-black);
+  opacity: 0;
+  transition: opacity 200ms ease-out;
+  pointer-events: none;
+}
+[data-tone="dark"] .stage-wrap::before {
+  opacity: 1;
+}
+[data-tone="dark"] .presets span {
+  color: color-mix(in srgb, var(--color-off-white) 62%, transparent);
+}
+[data-tone="dark"] .presets input:checked + span,
+[data-tone="dark"] .presets .slot.is-on > span {
+  color: var(--ink);
+}
+[data-tone="dark"] .slot:not(.is-filled) .well {
+  background: rgb(255 255 255 / 0.07);
+  box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.5), inset 0 0 0 0.5px rgb(255 255 255 / 0.08);
+  color: color-mix(in srgb, var(--color-off-white) 80%, transparent);
+}
+[data-tone="dark"] .looks :focus-visible,
+[data-tone="dark"] .presets input:focus-visible + span {
+  outline-color: var(--color-off-white);
 }
 .stage-sticky {
   position: sticky;
@@ -96,10 +129,10 @@ h1 {
   row-gap: 14px;
   width: 100%;
 }
-/* The glass sizes to the screen, minus the row of presets under it. */
+/* The glass sizes to the screen, minus the row of presets under it, up to 760 px on a large one. */
 .stage {
   position: relative;
-  width: min(100%, 640px, calc(100svh - 190px));
+  width: min(100%, 760px, calc(100svh - 190px));
   aspect-ratio: 1;
 }
 /* Under the glass: the presets and the die, one row. */
@@ -122,7 +155,8 @@ h1 {
   font-size: 12px;
 }
 /* A file is being dragged over the page: highlight the stage, it can be dropped anywhere. */
-.is-over .stage canvas {
+.is-over .stage {
+  border-radius: 24px;
   outline: 2px dashed var(--ink);
   outline-offset: -10px;
 }
@@ -136,6 +170,12 @@ h1 {
   background: repeating-conic-gradient(var(--color-off-white) 0 25%, color-mix(in srgb, var(--color-black) 6%, var(--color-off-white)) 0 50%) 0 0 / 24px 24px;
   /* The whole glass leans up to 6° toward the cursor or with the phone (app.js sets the lean, -1 to 1). */
   transform: perspective(1100px) rotateY(calc(var(--lean-x, 0) * 6deg)) rotateX(calc(var(--lean-y, 0) * 6deg));
+  /* The canvas edge feathers into the page over its outer 4% (the margin, the glass is in the middle 80%): the glass's
+     shadow reaches the edge a shade darker than the page, which would show as a square seam on a dark stage. */
+  -webkit-mask: linear-gradient(90deg, transparent, #000 4%, #000 96%, transparent), linear-gradient(transparent, #000 4%, #000 96%, transparent);
+  -webkit-mask-composite: source-in;
+  mask: linear-gradient(90deg, transparent, #000 4%, #000 96%, transparent), linear-gradient(transparent, #000 4%, #000 96%, transparent);
+  mask-composite: intersect;
 }
 .unsupported {
   display: none;
@@ -678,8 +718,25 @@ fieldset {
 .presets .slot.is-on > span {
   color: var(--ink);
 }
+/* With a mouse, a key under the glass answers the pointer: its glass lifts 2 px; an empty Random turns its die a little. */
+.presets canvas,
+.slot .well {
+  transition: transform 200ms cubic-bezier(0.3, 1.3, 0.4, 1), box-shadow 200ms ease-out;
+}
+@media (hover: hover) {
+  .presets label:hover canvas,
+  .presets .slot:hover .well {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 12px -6px color-mix(in srgb, var(--color-black) 30%, transparent);
+  }
+  .slot:not(.is-filled):hover svg {
+    transform: rotate(calc(var(--turn, 0deg) + 30deg));
+  }
+}
 @media (prefers-reduced-motion: reduce) {
-  .slot svg {
+  .slot svg,
+  .presets canvas,
+  .slot .well {
     transition: none;
   }
 }
@@ -1387,6 +1444,17 @@ button:disabled {
     width: calc(100% + 48px);
     padding: 8px 24px 10px;
     background: var(--color-off-white);
+    transition: background-color 200ms ease-out;
+  }
+  /* A dark stage is this pinned band itself, edge to edge; nothing fades out under it. */
+  .stage-wrap::before {
+    content: none;
+  }
+  [data-tone="dark"] .stage-wrap {
+    background-color: var(--color-black);
+  }
+  [data-tone="dark"] .stage-wrap::after {
+    display: none;
   }
   /* The settings fade out over 20 px as they slide under the pinned glass, instead of being cut on a line. */
   .stage-wrap::after {

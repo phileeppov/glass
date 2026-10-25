@@ -567,12 +567,17 @@ function loop(now) {
 
 // What the stage eases toward: the settings, or what the mouse is trying on (see "Try on hover").
 function goal() {
-  if (trying?.preset) return presetLook(trying.preset);
-  if (trying?.look) return lookOf(trying.look);
-  const look = target(params);
+  const look = trying?.preset ? presetLook(trying.preset) : trying?.look ? lookOf(trying.look) : target(params);
+  showStage(look.background);
   if (trying?.format === "avatar") return { ...look, n: 2, frame: 1, shadow: 0 };
   if (trying?.format === "store") return { ...look, frame: 1, shadow: 0 };
   return look;
+}
+
+// The page around the glass follows what the stage shows: dark for a dark background (see .stage-wrap::before).
+function showStage(background) {
+  const tone = background === "dark" ? "dark" : "light";
+  if (root.dataset.tone !== tone) root.dataset.tone = tone;
 }
 
 // Start redrawing if the loop is idle.
