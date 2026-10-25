@@ -34,7 +34,7 @@
  * @property {[number, number, number, number]} [light] sound as light: turn (rad), rim glow, fringe width, unused
  * @property {Float32Array} [fields] the handpan's 9 fields: x, y, radius, how hard it rings now
  * @property {[number, number, number, number]} [press] a held finger: x, y, how far the glass gives, radius
- * @property {[number, number]} [tilt] where the glass leans, -1..1 per axis; absent in exports
+ * @property {[number, number]} [tilt] where the glass leans, -1..1 per axis (to 1.5 with a phone); absent in exports
  * @property {number} [frame] share of the frame the icon takes, ICON_SCALE by default, 1 to fill it
  * @property {number} [shadow] 1: shadow under the icon (default), 0: none
  */
@@ -91,7 +91,7 @@ uniform float u_bands[8];   // sound by frequency, low to high, 0..1; laid along
 uniform vec4 u_press;       // a held finger: xy where, z how far the glass gives (0..1), w the radius it gives over
 uniform vec4 u_fields[9];   // the handpan's fields: xy centre, z radius, w how hard it rings now (0 at rest)
 uniform vec4 u_light;       // sound as light: x turns the light (rad), y brightens the rim, z widens the fringe; 0 in silence
-uniform vec2 u_tilt;        // where the glass leans, toward the cursor or with the phone: -1..1 per axis, 0 when still
+uniform vec2 u_tilt;        // where the glass leans, toward the cursor or with the phone: -1..1 per axis (to 1.5 with a phone), 0 when still
 uniform float u_zoom;       // 1: the icon takes ${Math.round(ICON_SCALE * 100)}% of the frame; less fills more (avatar and App Store fill all of it)
 uniform float u_shadow;     // 1: soft shadow under the icon, 0: none (avatar, App Store)
 
@@ -291,7 +291,8 @@ void main() {
   vec2 dir = normalize(mix(nrm, p / max(length(p), 1e-3), 0.45 * u_liquid));
   vec2 ripple = wv * 0.05 * u_liquid * nearEdge * side;
   // The light follows the lean; the logo under the glass shifts the other way, more under a thicker slab: parallax.
-  vec2 L = normalize(vec2(-0.55, 0.85) + u_tilt * 0.5);
+  // The light stops at a full lean: past it (a phone leans further) the sum could pass near zero and flip the light.
+  vec2 L = normalize(vec2(-0.55, 0.85) + clamp(u_tilt, -1.0, 1.0) * 0.5);
   // Pitch turns the light around the glass; the guard keeps the silent glass exactly as it was.
   if (u_light.x != 0.0) L = turn(u_light.x) * L;
   vec2 par = -u_tilt * (0.015 + 0.06 * u_volume * u_depth);

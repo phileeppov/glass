@@ -1085,7 +1085,8 @@ function soundError(mode, e) {
   return "Couldn't play that file. Try MP3, M4A or WAV.";
 }
 
-for (const input of root.querySelectorAll("input[name=sound]")) {
+const soundInputs = [...root.querySelectorAll("input[name=sound]")];
+for (const input of soundInputs) {
   input.addEventListener("change", () => {
     if (!input.checked) return;
     if (input.value === "track" && !sound.hasTrack) return void trackInput.click();
@@ -1102,9 +1103,15 @@ function warmUp() {
 addEventListener("pointerdown", warmUp);
 addEventListener("keydown", warmUp);
 
+// Back from the share sheet or a call, a phone can leave the sound frozen: the first touch or key after that starts it
+// over (see revive() in sound.js), before anything else on the page hears that touch. Not mid-recording: the video has
+// the old sound's track, and a new one would end it. Not on Esc: it doesn't count as a tap that lets sound start.
+addEventListener("pointerup", () => recording || sound.revive(), true);
+addEventListener("keydown", (e) => recording || e.key === "Escape" || sound.revive(), true);
+
 // Track tapped while it's already selected: start it if it's stopped, otherwise pick another file.
 trackRadio.parentElement.addEventListener("click", (e) => {
-  if (e.target === trackRadio || !trackRadio.checked) return;
+  if (e.target === trackRadio || !trackRadio.checked || recording) return;
   if (!sound.hasTrack || (sound.mode === "track" && !sound.audio.paused)) trackInput.click();
   else setSound("track");
 });
@@ -1148,15 +1155,19 @@ if (!reducedMotion) {
   });
 }
 
-// On a phone, the glass leans with the phone. Rest is how it's held: it drifts to the current grip in a couple of seconds.
+// On a phone, the glass leans with the phone. Rest is how it's held: it drifts to the current grip in about four seconds.
+// A phone in the hand turns less than a cursor crosses the stage, so 12 degrees of it is a full lean, and the lean goes
+// half again as far as the cursor's: the glass turns up to 9 degrees and the light inside moves with it.
 let grip = null;
+const PHONE_LEAN = 1.5;
+const phoneLean = (degrees) => clamp1(degrees / 12) * PHONE_LEAN;
 function onOrient(e) {
   if (e.beta == null || e.gamma == null) return;
   grip ??= { beta: e.beta, gamma: e.gamma };
-  grip.beta += (e.beta - grip.beta) * 0.01;
-  grip.gamma += (e.gamma - grip.gamma) * 0.01;
-  const x = clamp1((e.gamma - grip.gamma) / 20);
-  const y = clamp1(-(e.beta - grip.beta) / 20);
+  grip.beta += (e.beta - grip.beta) * 0.004;
+  grip.gamma += (e.gamma - grip.gamma) * 0.004;
+  const x = phoneLean(e.gamma - grip.gamma);
+  const y = phoneLean(-(e.beta - grip.beta));
   wake(Math.min(1, Math.hypot(x - tiltGoal[0], y - tiltGoal[1]) * 3));
   tiltGoal[0] = x;
   tiltGoal[1] = y;
@@ -1563,7 +1574,7 @@ for (const menu of menus) {
     const r = opener.closest(".key").getBoundingClientRect();
     menu.style.left = `${r.left}px`;
     menu.style.width = `${r.width}px`;
-    menu.style.bottom = `${innerHeight - r.top + 8}px`;
+    menu.style.top = `${r.top - 8}px`;
   });
   menu.addEventListener("toggle", (e) => {
     opener.setAttribute("aria-expanded", String(e.newState === "open"));
@@ -1589,6 +1600,23 @@ function closeMenus() {
 }
 addEventListener("resize", closeMenus);
 addEventListener("scroll", closeMenus, { passive: true });
+
+// On a phone only the glass is pinned (see .stage in the styles). Once the presets reach the band under it, the page is
+// marked, and what slides under the glass fades out at the band's edge. The band reaches the page's edges: --bleed is
+// how far past the glass they are, without a scrollbar, measured whenever the glass or the page changes width.
+const looksRow = root.querySelector(".looks");
+function under() {
+  root.classList.toggle("is-under", looksRow.getBoundingClientRect().top < stage.getBoundingClientRect().bottom + 7);
+}
+function bleed() {
+  stage.style.setProperty("--bleed", `${Math.floor((document.documentElement.clientWidth - stage.offsetWidth) / 2)}px`);
+}
+addEventListener("scroll", under, { passive: true });
+addEventListener("resize", under);
+const widths = new ResizeObserver(bleed);
+widths.observe(stage);
+widths.observe(document.documentElement);
+under();
 
 // --- Link to a look ---
 
@@ -1812,6 +1840,8 @@ videoButton.addEventListener("click", async () => {
   recording = true;
   arrival = null; // a logo still settling would freeze half-settled in the video
   clipInput.disabled = true; // the part being recorded stays the part the strip shows
+  // The sound stays the one the video started with: it set the video's length and its sound track.
+  for (const input of soundInputs) input.disabled = true;
   // Must reset: otherwise kick() after recording thinks the loop is alive, and the preview freezes.
   cancelAnimationFrame(frame);
   frame = 0;
@@ -1890,9 +1920,11 @@ videoButton.addEventListener("click", async () => {
       requestAnimationFrame(tick);
     });
     recorder.stop();
-    await done;
+    // A recorder whose sound stopped coming may never finish: the page waits for it a few seconds, not for good.
+    const stopped = await Promise.race([done.then(() => true), new Promise((resolve) => setTimeout(resolve, 8000, false))]);
     // Only the canvas track: the sound track belongs to the page and serves the next recording too.
     video.getTracks().forEach((t) => t.stop());
+    if (!stopped) throw new Error("stalled");
 
     const mp4 = type.startsWith("video/mp4");
     if (chunks.length) {
@@ -1903,13 +1935,15 @@ videoButton.addEventListener("click", async () => {
     } else {
       message = "This browser can't record video. Try Chrome or Safari.";
     }
-  } catch {
-    message = audio
-      ? "This browser can't record video with sound. Turn Sound off to record without it."
-      : "This browser can't record video. Try Chrome or Safari.";
+  } catch (e) {
+    // A recording whose sound stopped: the next touch brings the sound back, so another try works.
+    if (e?.message === "stalled") message = "Couldn't record the video with sound. Try again.";
+    else if (audio) message = "This browser can't record video with sound. Turn Sound off to record without it.";
+    else message = "This browser can't record video. Try Chrome or Safari.";
   } finally {
     recording = false;
     clipInput.disabled = false;
+    for (const input of soundInputs) input.disabled = false;
     root.classList.remove("is-recording");
     videoButton.disabled = pngButton.disabled = false;
     say(message);
@@ -1966,6 +2000,8 @@ shareButton.addEventListener("click", async () => {
   if ((touch || ios) && navigator.canShare?.({ files: [file] })) {
     try {
       await navigator.share({ files: [file], text: SHARE_POST });
+      // Saved: the full Save key has done its job and gives the settings their room back. Closing the sheet keeps it.
+      if (shareButton.classList.contains("is-save")) shareButton.hidden = true;
     } catch (e) {
       // Sheet closed: do nothing. On iPhone the file can't be saved without the sheet, so on failure fall back to a regular download.
       if (ios && e.name !== "AbortError") download(file, file.name);

@@ -95,12 +95,20 @@ export class Sound {
   wait = 0; // time since the last frame that had new audio, s
   last = { level: 0, bass: 0, bands: new Float32Array(BANDS), bright: 0, pitch: 0.5 };
   singer = null;
+  still = null; // the context's clock when it was last seen to move, and since when: { time, since }
+  watch = 0;
 
   // The context starts on the first tap: browsers only let audio run after one.
   ensure() {
     if (this.ctx) return;
+    // Before the context, and for a touch on the glass too: the silent switch would mute it otherwise (see session()).
+    // A mic carried over by revive() keeps its own session.
+    this.session(this.micStream ? "play-and-record" : "playback");
     const ctx = new AudioContext();
     this.ctx = ctx;
+    this.still = null;
+    ctx.addEventListener("statechange", () => (this.still = null));
+    this.watch ||= setInterval(() => this.frozen, 1000);
     this.analyser = ctx.createAnalyser();
     this.analyser.fftSize = FFT;
     // Smoothing is done here, per frame, with a fast attack: the analyser's own smoothing blunts the beat.
@@ -259,7 +267,54 @@ export class Sound {
 
   // Sound can start right on the press once the page has been allowed to play; before that only a release may start it.
   get ready() {
-    return this.ctx?.state === "running";
+    return this.ctx?.state === "running" && !this.frozen;
+  }
+
+  // Whether the context says it runs while its clock stands still (see revive()). The clock is looked at once a second
+  // and on every touch; one that hasn't moved for 2 s is frozen: a real freeze lasts minutes, and a clock held up for a
+  // moment (a long task, a new output device) mustn't cost a healthy context. A change of state starts the look over.
+  get frozen() {
+    const ctx = this.ctx;
+    if (ctx?.state !== "running") return false;
+    const now = performance.now();
+    if (ctx.currentTime !== this.still?.time) this.still = { time: ctx.currentTime, since: now };
+    return now - this.still.since > 2000;
+  }
+
+  // Back from the share sheet, a call or another app, a phone can hand the page a context that says it runs while its
+  // clock stands still: nothing sounds, and a video waiting on its sound never ends. It doesn't come back by itself, so
+  // the page calls this on every touch and key: a frozen context is closed and the sound starts over on a new one, in
+  // that very touch, as browsers require. Whatever was on carries on: the loop from its first beat, a track where it was.
+  revive() {
+    if (!this.frozen) return;
+    const { audio, micStream, mode } = this;
+    const playing = !audio.paused;
+    this.stopTune();
+    this.hush();
+    audio.pause();
+    this.micSource?.disconnect();
+    this.micSource = null;
+    this.ctx.close().catch(() => {});
+    this.ctx = null;
+    // A media element feeds one context for good: the new context gets a new element with the same file.
+    this.ensure();
+    this.ctx.resume();
+    if (audio.src) {
+      // Set before the file loads, the position is where it starts; a part picked for a video right after moves it again.
+      this.audio.src = audio.src;
+      this.audio.currentTime = audio.currentTime;
+      if (playing) this.audio.play().catch(() => {});
+      // The old element lets go of the file (the URL stays: the new one plays it).
+      audio.removeAttribute("src");
+      audio.load();
+    }
+    if (micStream) {
+      this.micSource = this.ctx.createMediaStreamSource(micStream);
+      this.micSource.connect(this.analyser);
+      this.micSource.connect(this.rec);
+    }
+    if (mode === "demo") this.prepare().then((buffer) => this.mode === "demo" && this.playTune(buffer), () => {});
+    this.restart();
   }
 
   rub(speed) {
@@ -410,6 +465,7 @@ export class Sound {
     this.audio?.pause();
     this.stopTune();
     this.stopMic();
+    this.session("playback"); // after the mic, the glass's notes go back to the speaker
   }
 
   stopMic() {

@@ -173,7 +173,7 @@ h1 {
   border-radius: 24px;
   /* The checkerboard shows only in no-background mode, to show the PNG is transparent. */
   background: repeating-conic-gradient(var(--color-off-white) 0 25%, color-mix(in srgb, var(--color-black) 6%, var(--color-off-white)) 0 50%) 0 0 / 24px 24px;
-  /* The whole glass leans up to 6° toward the cursor or with the phone (app.js sets the lean, -1 to 1). */
+  /* The whole glass leans up to 6° toward the cursor, 9° with the phone (app.js sets the lean, -1 to 1, to 1.5 with the phone). */
   transform: perspective(1100px) rotateY(calc(var(--lean-x, 0) * 6deg)) rotateX(calc(var(--lean-y, 0) * 6deg));
   /* The canvas edge feathers into the page over its outer 4% (the margin, the glass is in the middle 80%): the glass's
      shadow reaches the edge a shade darker than the page, which would show as a square seam on a dark stage. */
@@ -1221,6 +1221,10 @@ button:disabled {
 .menu {
   position: fixed;
   inset: auto;
+  /* app.js pins its top 8 px over the key; it rises by its own height. Pinned by the bottom, with the popover's own
+     fit-content height, a fieldset could be stretched up to the top of the screen. */
+  height: auto;
+  translate: 0 -100%;
   margin: 0;
   padding: 4px;
   border: 0;
@@ -1244,6 +1248,7 @@ button:disabled {
     position: static;
     display: none;
     gap: 2px;
+    translate: none;
   }
   .menu.is-open {
     display: grid;
@@ -1392,6 +1397,7 @@ button:disabled {
 .presets label,
 .presets .slot {
   flex: 0 0 var(--key);
+  width: var(--key); /* the row's own width is summed from its keys: some browsers take their content, not flex-basis */
 }
 .presets span {
   display: grid;
@@ -1576,8 +1582,10 @@ button:disabled {
   }
   .glass {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-areas: "intro" "stage" "controls" "foot";
+    grid-template-areas: "intro" "stage" "looks" "controls" "foot";
     grid-template-rows: none;
+    /* The page under the glass: its own color, darkening with a dark stage. */
+    --band: color-mix(in srgb, var(--color-black) calc(var(--dark, 0) * 100%), var(--color-off-white));
   }
   /* On a phone the glass is the headline: the name and the line sit in one quiet row over it. */
   .intro {
@@ -1605,51 +1613,66 @@ button:disabled {
     margin-top: 4px;
     font-size: 12px;
   }
-  /* On phones the icon sticks to the top of the screen, and the settings scroll under it. */
-  .stage-wrap {
-    position: sticky;
-    align-self: start;
-    top: 0;
-    z-index: 5;
-    max-width: none;
-    margin-inline: -24px;
-    width: calc(100% + 48px);
-    padding: 8px 24px 10px;
-    background: color-mix(in srgb, var(--color-black) calc(var(--dark, 0) * 100%), var(--color-off-white));
+  /* On phones the glass sticks to the top of the screen and everything under it scrolls under it, the presets too:
+     they're picked with the glass in full view, and while the settings are tuned the room goes to them. The wrappers
+     step aside, so the glass and the presets are rows of the page itself and the glass stays pinned all the way down. */
+  .stage-wrap,
+  .stage-sticky {
+    display: contents;
   }
-  /* A dark stage is this pinned band itself, edge to edge, darkening with the glass; nothing fades out under it. */
-  .stage-wrap::before {
+  .stage-wrap::before,
+  .stage-wrap::after {
     content: none;
   }
-  [data-tone="dark"] .stage-wrap::after {
-    display: none;
+  /* The glass takes the width, as long as Upload still shows above the dock with the browser's bars out (svh).
+     Pinned, it keeps a band of the page's color 8 px over and under it, edge to edge: a dark stage is this band itself.
+     The band is a box of its own, so a tap beside the glass lands on it, not on a key hidden under it. How far the
+     page's edges are past the glass, --bleed, comes from app.js: 100vw would count a scrollbar and widen the page.
+     It runs 1 px into the presets' band, so the two never show a seam. */
+  .stage {
+    grid-area: stage;
+    position: sticky;
+    top: 8px;
+    z-index: 5;
+    width: min(100%, max(160px, 100svh - 330px)); /* never under 160 px, as on a phone held sideways */
+    margin: 8px auto 0;
   }
-  /* The settings fade out over 20 px as they slide under the pinned glass, instead of being cut on a line. */
-  .stage-wrap::after {
+  .stage::before {
     content: "";
     position: absolute;
+    z-index: -1;
+    inset: -8px calc(-1 * var(--bleed, 0px)) -9px;
+    background: var(--band);
+  }
+  /* Once the presets reach the band (app.js marks it), what slides under the glass fades out over 20 px instead of
+     being cut on a line. At rest the fade would lie over the presets, so it waits. A dark band has none. */
+  .stage::after {
+    content: "";
+    position: absolute;
+    top: calc(100% + 8px);
     left: 0;
     right: 0;
-    top: 100%;
     height: 20px;
-    background: linear-gradient(var(--color-off-white), color-mix(in srgb, var(--color-off-white) 0%, transparent));
+    border-image: linear-gradient(var(--color-off-white), color-mix(in srgb, var(--color-off-white) 0%, transparent)) fill 0 // 0 100vmax;
+    opacity: 0;
+    transition: opacity 160ms ease-out;
     pointer-events: none;
   }
-  .stage-sticky {
-    position: static;
-    height: auto;
-    display: block;
+  .is-under .stage::after {
+    opacity: 1;
   }
-  /* The glass takes the width, as long as Upload still shows above the dock with the browser's bars out (svh). */
-  .stage {
-    width: min(100%, max(160px, 100svh - 330px)); /* never under 160 px, as on a phone held sideways */
-    margin-inline: auto;
+  [data-tone="dark"] .stage::after {
+    display: none;
   }
-  /* Six keys across the phone: as wide as fits (the page less its 24 px sides, the row's 3 px edges and 2 px gaps), 56 px at most. */
+  /* Six keys across the phone: as wide as fits (the page less its 24 px sides, the row's 3 px edges and 2 px gaps), 56 px at most.
+     8 px under the glass (the grid's 24 px gap, less 16), on a band of the page's color that runs 10 px under them, so
+     a dark stage is dark behind them too until they slide under the glass. */
   .looks {
+    grid-area: looks;
     --pad: 6px;
     --key: min(56px, (100vw - 64px) / 6);
-    margin: 8px auto 0;
+    margin: -16px auto 10px;
+    border-image: conic-gradient(var(--band) 0 0) fill 0 // 0 100vmax 10px;
   }
   .presets span {
     font-size: 11px;
