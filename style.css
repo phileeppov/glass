@@ -812,7 +812,7 @@ fieldset span {
   border-radius: 999px;
   background: linear-gradient(180deg, #fff 0%, var(--panel) 100%);
   box-shadow: var(--raise);
-  transition: translate 360ms cubic-bezier(0.3, 1.3, 0.4, 1), opacity 160ms ease-out;
+  transition: translate 360ms cubic-bezier(0.3, 1.05, 0.4, 1), opacity 160ms ease-out; /* barely past the target: the stretch is the bounce now, and it stays inside the tray */
 }
 /* On its way to the new option the pill stretches a little and settles (app.js replays is-moving on each change). */
 .seg.is-moving::before {
@@ -1057,6 +1057,7 @@ button:disabled {
 }
 .key > button:disabled {
   opacity: 1;
+  filter: none; /* the page's button:hover brightening would wash out the recording fill */
 }
 .is-recording .opt {
   pointer-events: none;
@@ -1078,18 +1079,19 @@ button:disabled {
   font-size: var(--text-meta);
   letter-spacing: -0.04em;
 }
-/* A fieldset is display: flex in this sheet, which would keep a closed menu on screen. Two rules, not one list:
-   a browser without popovers drops a list with :popover-open whole, [hidden] included. */
+/* A fieldset is display: flex in this sheet, which would keep a closed menu on screen. */
 .menu:not(:popover-open) {
   display: none;
 }
-.menu[hidden] {
-  display: none;
-}
-/* Without popovers (Safari before 17, Firefox before 125) the menu opens in the dock itself, under the keys. */
+/* Without popovers (Safari before 17, Firefox before 125) the menu opens in the dock itself, under the keys,
+   when app.js marks it is-open. A browser that can't read :popover-open drops the rule above, so this one hides it. */
 @supports not selector(:popover-open) {
   .menu {
     position: static;
+    display: none;
+    gap: 2px;
+  }
+  .menu.is-open {
     display: grid;
   }
 }
@@ -1199,7 +1201,7 @@ button:disabled {
   clip-path: inset(50%);
   white-space: nowrap;
 }
-.is-recording [data-video] {
+.is-recording .key > [data-video] {
   opacity: 1;
   background:
     linear-gradient(var(--tray), var(--tray)) left / 0% 100% no-repeat,

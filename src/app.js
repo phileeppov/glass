@@ -749,6 +749,8 @@ for (const sample of root.querySelectorAll("[data-sample]")) {
     loadText(sample.dataset.sample);
     tried("text");
     tell("text");
+    // From the keyboard the focus sits on the sample, which is about to hide: it goes back to the field.
+    if (document.activeElement === sample) textInput.focus();
     // A mark stays in the open field; the ☺ (an empty field) folds it back, unless the caret is still in it.
     // Safari doesn't focus a tapped button, so the field may have folded on the way here.
     openText(Boolean(sample.dataset.sample) || document.activeElement === textInput);
@@ -1228,11 +1230,8 @@ new MutationObserver(() => {
     countdown = 0;
     videoName.textContent = RECORD;
     showCaption();
-    // A roll made while the video recorded got no picture then (the renderer was busy): it gets it now.
-    if (rolled) {
-      paintThumb(rollThumb, rolled);
-      draw();
-    }
+    // The renderer was busy with the video: the keys under the glass (a roll made meanwhile, a new logo color) catch up now.
+    renderThumbs();
     return;
   }
   const end = performance.now() + (parseFloat(videoButton.style.getPropertyValue("--rec")) || PERIOD);
@@ -1254,10 +1253,9 @@ for (const menu of menus) {
   opener.setAttribute("aria-expanded", "false");
   // Without the popover API (Safari before 17) the formats simply show and hide in the dock, under the keys.
   if (!popovers) {
-    menu.hidden = true;
     opener.addEventListener("click", () => {
-      menu.hidden = !menu.hidden;
-      opener.setAttribute("aria-expanded", String(!menu.hidden));
+      const open = menu.classList.toggle("is-open");
+      opener.setAttribute("aria-expanded", String(open));
     });
     continue;
   }
