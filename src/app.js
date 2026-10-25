@@ -1226,7 +1226,7 @@ function frameInto(out, p, phase, opaque = false) {
 }
 
 // What Download PNG makes. Avatar: the glass as a circle filling the frame, for round profile pictures.
-// App Store: the shape fills the square with no shadow and no transparency; Apple rounds the corners itself.
+// App Store: the shape fills the square with no shadow and no transparency; the store rounds the corners itself.
 const IMAGES = {
   icon: { px: EXPORT_PX, name: "glass-icon.png", note: "PNG 1024 px" },
   large: { px: 2048, name: "glass-icon-2048.png", note: "PNG 2048 px", told: "image:2048" },
