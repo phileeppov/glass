@@ -28,9 +28,12 @@
  * @property {number} facet 0: a rounded rim, 1: cut glass, two flat facets with crisp edges
  * @property {Background} background
  * @property {[number, number, number]} bg background color for light/dark, 0..1
- * @property {[number, number, number, number]} [sound] loudness, bass, beat, unused; all 0 or absent when sound is off
+ * @property {number} [reverse] 1: the logo's lightness turned over, its hue kept
+ * @property {[number, number, number, number]} [sound] unused, bass, beat, unused; all 0 or absent when sound is off
  * @property {Float32Array} [bands] 8 frequency bands, 0..1, low to high
- * @property {Float32Array} [drops] 4 tap ripples, x, y, age (s), strength each
+ * @property {[number, number, number, number]} [light] sound as light: turn (rad), rim glow, fringe width, unused
+ * @property {Float32Array} [fields] the handpan's 9 fields: x, y, radius, how hard it rings now
+ * @property {[number, number, number, number]} [press] a held finger: x, y, how far the glass gives, radius
  * @property {[number, number]} [tilt] where the glass leans, -1..1 per axis; absent in exports
  * @property {number} [frame] share of the frame the icon takes, ICON_SCALE by default, 1 to fill it
  * @property {number} [shadow] 1: shadow under the icon (default), 0: none
@@ -72,6 +75,7 @@ uniform float u_phase;      // 0..1, one animation loop
 uniform float u_motion;
 uniform float u_size;
 uniform vec4 u_tint;        // rgb is the fill, a is how much to fill: 0 own color, 1 fill
+uniform float u_reverse;    // 1: the logo's lightness turned over, its hue kept (a dark two-tone logo on dark)
 uniform float u_sideMix;    // 0: everywhere, 1: selected sides only
 uniform float u_sideTwo;    // 0: one side, 1: two
 uniform float u_angle;
@@ -82,9 +86,11 @@ uniform float u_depth;      // 0: flat glass, 1: with volume; continuous so the 
 uniform float u_facet;      // 0: a rounded rim, 1: cut glass; continuous so a preset eases from one to the other
 uniform vec3 u_bg;
 uniform float u_mode;       // 0 light, 1 dark, 2 transparent
-uniform vec4 u_sound;       // x loudness, y bass; all 0 when sound is off, and then nothing below changes
+uniform vec4 u_sound;       // y bass; all 0 when sound is off, and then nothing below changes
 uniform float u_bands[8];   // sound by frequency, low to high, 0..1; laid along the fringe from red to violet
-uniform vec4 u_drops[4];    // tap ripples: xy center, z age (s), w strength
+uniform vec4 u_press;       // a held finger: xy where, z how far the glass gives (0..1), w the radius it gives over
+uniform vec4 u_fields[9];   // the handpan's fields: xy centre, z radius, w how hard it rings now (0 at rest)
+uniform vec4 u_light;       // sound as light: x turns the light (rad), y brightens the rim, z widens the fringe; 0 in silence
 uniform vec2 u_tilt;        // where the glass leans, toward the cursor or with the phone: -1..1 per axis, 0 when still
 uniform float u_zoom;       // 1: the icon takes ${Math.round(ICON_SCALE * 100)}% of the frame; less fills more (avatar and App Store fill all of it)
 uniform float u_shadow;     // 1: soft shadow under the icon, 0: none (avatar, App Store)
@@ -137,7 +143,9 @@ vec4 content(vec2 q, float blur) {
   uv.y = 1.0 - uv.y;
   float dist = (texture2D(u_sdf, uv).r * 255.0 - 128.0) / 127.0 * ${SDF_SPREAD.toFixed(1)};
   float cov = smoothstep(-blur, blur, dist);
-  vec3 col = mix(texture2D(u_color, uv).rgb, u_tint.rgb, u_tint.a);
+  vec3 col = texture2D(u_color, uv).rgb;
+  if (u_reverse > 0.0) col = mix(col, clamp(col + 1.0 - 2.0 * dot(col, vec3(0.299, 0.587, 0.114)), 0.0, 1.0), u_reverse);
+  col = mix(col, u_tint.rgb, u_tint.a);
   vec4 logo = vec4(col * cov, cov);
   return logo + glassBase() * (1.0 - logo.a);
 }
@@ -184,14 +192,10 @@ vec2 waves(vec2 p, float T) {
   return vec2(a, b) * 0.5;
 }
 
-// A drop: a small round ripple from d.xy where a tap lands.
-// xy bends the image; z is the crest's slope toward the light L, for a glint that shows on empty glass too.
-vec3 drop(vec2 p, vec4 d, vec2 L) {
-  vec2 v = p - d.xy;
-  float r = length(v);
-  vec2 dir = v / max(r, 1e-3);
-  float x = (r - d.z * 1.1) / 0.045;
-  return vec3(dir, dot(dir, L)) * x * exp(-x * x) * d.w * exp(-4.0 * d.z);
+mat2 turn(float a) {
+  float c = cos(a);
+  float s = sin(a);
+  return mat2(c, s, -s, c);
 }
 
 // Noise with a uniform spectrum: sample jitter instead of banding.
@@ -209,6 +213,19 @@ void main() {
   vec2 nrm;
   float d = shape(p, nrm);
   float th = atan(p.y, p.x + 1e-7); // offset so there is no atan(0, 0) at the exact center
+  // A struck field reaches into the rim near it, the way a beat does all round; the ding in the middle reaches all round.
+  float reachHit = 0.0;
+  for (int i = 0; i < 9; i++) {
+    vec4 f = u_fields[i];
+    if (f.w < 0.002) continue;
+    float near = 1.0;
+    if (i > 0) {
+      float fa = atan(f.y, f.x + 1e-7);
+      float da = atan(sin(th - fa), cos(th - fa));
+      near = exp(-da * da / 0.3);
+    }
+    reachHit += f.w * near;
+  }
   float wob = u_motion * (0.016 * sin(3.0 * th + T) + 0.01 * sin(2.0 * th - 2.0 * T));
   d -= wob;
   // Inward depth along scaled-down copies of the shape: 0 at the edge, growing toward the center.
@@ -261,28 +278,37 @@ void main() {
   // Waves in the glass: the smear thickness varies along the rim. None in the center, so the glyph stays even there.
   vec2 wv = waves(p, T);
   float nearEdge = 1.0 - smoothstep(0.0, 0.6, depth);
-  // Loudness swells the waves on top of Blend, just enough to see.
-  float swell = 1.0 + 0.45 * u_liquid * wv.x * nearEdge + 0.12 * u_sound.x * wv.x * nearEdge;
+  float swell = 1.0 + 0.45 * u_liquid * wv.x * nearEdge;
   // A corner is farther from the center than a side's midpoint, so the ray reaches farther, or the corner runs short of glyph.
   float cornerReach = length(p) / max(snorm(p), 1e-3);
   // The band at the rim stays (long tails along the sides); the bridge to the glyph is added on top.
   float k = u_refract * 0.42 * wave * swell * cornerReach * max(rimPull, flow * u_liquid) * side;
+  // A struck field pulls the rim near it whatever the sides are, so the glass answers wherever it's played.
+  k += u_refract * 0.42 * cornerReach * rimPull * 0.8 * reachHit;
   // Color spread is capped: otherwise, at large offsets the fringe smears into wide blotches.
-  float kDisp = min(k, 0.16);
+  float kDisp = min(k, 0.16 + 0.08 * u_light.z + 0.05 * reachHit);
   // Sample direction: along the normal; with Liquid it converges toward the center, and the tails pool into the corner.
   vec2 dir = normalize(mix(nrm, p / max(length(p), 1e-3), 0.45 * u_liquid));
-  // The sound terms are separate additions, not folded into the old ones: with sound off they add exactly 0.
-  vec2 ripple = wv * 0.05 * u_liquid * nearEdge * side + wv * 0.012 * u_sound.x * nearEdge * side;
-  // Tap ripples bend whatever they pass over, the glyph too.
+  vec2 ripple = wv * 0.05 * u_liquid * nearEdge * side;
   // The light follows the lean; the logo under the glass shifts the other way, more under a thicker slab: parallax.
   vec2 L = normalize(vec2(-0.55, 0.85) + u_tilt * 0.5);
+  // Pitch turns the light around the glass; the guard keeps the silent glass exactly as it was.
+  if (u_light.x != 0.0) L = turn(u_light.x) * L;
   vec2 par = -u_tilt * (0.015 + 0.06 * u_volume * u_depth);
+  // Touch: a struck field focuses, drawing what's beneath toward its middle, and a held finger is a soft lens.
   vec2 wake = vec2(0.0);
-  float ripGlint = 0.0;
-  for (int j = 0; j < 4; j++) {
-    vec3 dj = drop(p, u_drops[j], L);
-    wake += dj.xy * 0.025;
-    ripGlint += dj.z * 0.35;
+  for (int i = 0; i < 9; i++) {
+    vec4 f = u_fields[i];
+    if (f.w < 0.002) continue;
+    vec2 v = p - f.xy;
+    float r = length(v) / f.z;
+    wake -= v * exp(-r * r * 2.2) * 0.24 * f.w;
+  }
+  if (u_press.z > 0.001) {
+    vec2 v = p - u_press.xy;
+    float r = length(v) / u_press.w;
+    float lens = 1.0 - smoothstep(0.0, 1.0, r);
+    wake -= v * lens * lens * 0.3 * u_press.z;
   }
 
   // Volume: a slab with a rounded rim. Thickness sets its visible width and depth,
@@ -340,7 +366,7 @@ void main() {
       // Red goes deeper, blue stays closer to the edge: red fringe outside, cyan inside.
       // A small spread along the rim softens hard cuts in the glyph.
       float along = (fract(x * 7.31 + jitter) - 0.5) * 0.25;
-      float spread = (0.5 - x) * order * (1.0 + 0.5 * tone);
+      float spread = (0.5 - x) * order * (1.0 + 0.5 * tone + 0.8 * u_light.z + 0.5 * reachHit);
       vec2 off = -dir * (k + kDisp * u_disp * spread * 0.75) + ripple + wake;
       vec4 c;
       if (vol) {
@@ -362,26 +388,25 @@ void main() {
     inside.rgb = clamp(luma + (inside.rgb - luma) * 1.35, 0.0, a);
   }
 
-  // Ripple crests catch the light on one side and shade the other.
-  if (ripGlint != 0.0) inside.rgb = clamp(inside.rgb + inside.a * 0.25 * ripGlint, 0.0, inside.a);
   float lit = 0.55 + 0.45 * dot(nrm, L);
   // A thin glint right at the edge; photographed glass always has one.
   float glint = exp(-sq((-d - 0.012) / (2.0 * px)));
   // Flat rim: a light band with a thin glint inside and a gray outline outside.
   float band = smoothstep(0.035, 0.0, -d);
-  vec4 flatRim = mix(inside, vec4(1.0), clamp(glint * (0.35 + 0.55 * lit) + band * 0.12, 0.0, 1.0));
+  vec4 flatRim = mix(inside, vec4(1.0), clamp(glint * (0.35 + 0.55 * lit + 0.6 * u_light.y) + band * (0.12 + 0.15 * u_light.y), 0.0, 1.0));
   if (vol) {
     vec4 v = inside;
     // Fresnel reflection of the room, kept weak: the glass should read as clear, not glossy plastic.
     vec3 refl = reflect(vec3(u_tilt * 0.25, -1.0), n3); // the room in the rim slides with the lean
+    if (u_light.x != 0.0) refl.xy = turn(u_light.x) * refl.xy;
     float fres = (0.04 + 0.96 * pow(max(1.0 - n3.z, 0.0), 3.0)) * step(tr, 0.999);
-    v = mix(v, vec4(studio(refl), 1.0), clamp(fres, 0.0, 1.0) * 0.55);
+    v = mix(v, vec4(studio(refl), 1.0), clamp(fres, 0.0, 1.0) * (0.55 + 0.3 * u_light.y));
     // The seam where the rim meets the flat top: a highlight on the lit side, a shadow on the opposite side.
     float seam = exp(-sq((depth - rimW) / (1.4 * px)));
     float toLight = dot(nrm, L);
-    v = mix(v, vec4(1.0), seam * max(toLight, 0.0) * 0.6);
+    v = mix(v, vec4(1.0), seam * max(toLight, 0.0) * (0.6 + 0.5 * u_light.y));
     v.rgb *= 1.0 - seam * max(-toLight, 0.0) * 0.2;
-    v = mix(v, vec4(1.0), glint * (0.25 + 0.5 * lit));
+    v = mix(v, vec4(1.0), glint * (0.25 + 0.5 * lit + 0.6 * u_light.y));
     // Facet edges catch the light as fine lines, brighter on the side facing it.
     if (u_facet > 0.001) {
       float edgeLine = exp(-sq((e - 0.5) * u_edge / (1.1 * px)));
@@ -396,7 +421,7 @@ void main() {
 
   float line = smoothstep(2.0 * px, 0.0, -d);
   if (u_mode > 0.5 && u_mode < 1.5) inside = mix(inside, vec4(1.0), 0.3 * line);
-  else inside.rgb *= 1.0 - 0.12 * line;
+  else inside.rgb *= 1.0 - (0.12 + 0.2 * u_light.y) * line;
 
   float cov = clamp(0.5 - d / px, 0.0, 1.0);
   gl_FragColor = inside * cov + outside * (1.0 - cov);
@@ -404,12 +429,12 @@ void main() {
 
 const UNIFORMS = [
   "u_sdf", "u_color", "u_texSize", "u_halfPx", "u_n", "u_edge", "u_refract", "u_disp", "u_phase",
-  "u_motion", "u_size", "u_tint", "u_sideMix", "u_sideTwo", "u_angle", "u_spread", "u_liquid", "u_volume", "u_depth", "u_facet", "u_bg", "u_mode",
-  "u_sound", "u_bands", "u_drops", "u_tilt", "u_zoom", "u_shadow",
+  "u_motion", "u_size", "u_tint", "u_reverse", "u_sideMix", "u_sideTwo", "u_angle", "u_spread", "u_liquid", "u_volume", "u_depth", "u_facet", "u_bg", "u_mode",
+  "u_sound", "u_bands", "u_press", "u_fields", "u_light", "u_tilt", "u_zoom", "u_shadow",
 ];
 const SILENT = [0, 0, 0, 0];
 const NO_BANDS = new Float32Array(8);
-const NO_DROPS = new Float32Array(16);
+const NO_FIELDS = new Float32Array(36);
 const STILL = [0, 0];
 
 export class GlassRenderer {
@@ -512,6 +537,7 @@ export class GlassRenderer {
     gl.uniform1f(this.loc.u_motion, params.motion);
     gl.uniform1f(this.loc.u_size, params.size);
     gl.uniform4f(this.loc.u_tint, ...params.tint, params.tintMix);
+    gl.uniform1f(this.loc.u_reverse, params.reverse ?? 0);
     gl.uniform1f(this.loc.u_sideMix, params.sideMix);
     gl.uniform1f(this.loc.u_sideTwo, params.sideTwo);
     gl.uniform1f(this.loc.u_angle, params.angle);
@@ -524,7 +550,9 @@ export class GlassRenderer {
     gl.uniform1f(this.loc.u_mode, params.background === "light" ? 0 : params.background === "dark" ? 1 : 2);
     gl.uniform4fv(this.loc.u_sound, params.sound ?? SILENT);
     gl.uniform1fv(this.loc.u_bands, params.bands ?? NO_BANDS);
-    gl.uniform4fv(this.loc.u_drops, params.drops ?? NO_DROPS);
+    gl.uniform4fv(this.loc.u_press, params.press ?? SILENT);
+    gl.uniform4fv(this.loc.u_fields, params.fields ?? NO_FIELDS);
+    gl.uniform4fv(this.loc.u_light, params.light ?? SILENT);
     gl.uniform2fv(this.loc.u_tilt, params.tilt ?? STILL);
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT);

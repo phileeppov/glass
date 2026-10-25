@@ -2,7 +2,7 @@
 import { GlassRenderer, ICON_SCALE, LOGO_FILL, SDF_SPREAD } from "./renderer.js";
 import { buildSdf } from "./sdf.js";
 import { Sound } from "./sound.js";
-import { TUNE_LENGTH } from "./tune.js";
+import { LOOP, PAN, fieldAt } from "./tune.js";
 
 const LAYER = 1024; // logo textures, px
 const EXPORT_PX = 1024;
@@ -65,6 +65,7 @@ const applyVolume = () => {
 };
 let logoColor = "original";
 let logoLuma = 0; // average logo luminance 0..1; a dark logo on a dark background is turned white, a white one on light black
+let twoTone = false; // the logo has both dark and light parts, like white letters on a dark plate
 let fill = false; // a photo or an icon on its own plate: it covers the glass edge to edge instead of sitting on it
 let stroke = "bold"; // how thick the logo's thickest part is: thin, mid, bold, or fill for a photo (see buildLogo)
 let autoColor = false; // the color was switched by the code, not by the user
@@ -171,6 +172,7 @@ async function loadUrl(url, via) {
   applyColor();
   renderThumbs();
   draw();
+  if (via) arrive();
   kick();
 }
 
@@ -183,7 +185,7 @@ async function loadText(text) {
   if (recording) return;
   const turn = ++textTurn;
   if (autoColor) setColor("original");
-  if (!text) return loadSvg(DEMO_SVG); // an empty field brings back the ☺
+  if (!text) return loadSvg(DEMO_SVG).then(arrive); // an empty field brings back the ☺
   try {
     await document.fonts.load(TEXT_FONT, text);
   } catch {
@@ -207,6 +209,7 @@ async function loadText(text) {
   applyColor();
   renderThumbs();
   draw();
+  arrive();
   kick();
 }
 
@@ -371,6 +374,15 @@ function buildLogo(img, crop) {
     }
   }
   const avg = n ? [r / n, g / n, b / n] : [0, 0, 0];
+  // How much of the mark is light and how much dark: a good share of both is a two-tone logo.
+  let light = 0, dark = 0;
+  for (let i = 0; i < shape.length; i += 4) {
+    if (shape[i + 3] <= 128) continue;
+    const y = (0.299 * shape[i] + 0.587 * shape[i + 1] + 0.114 * shape[i + 2]) / 255;
+    if (y > 0.6) light++;
+    else if (y < 0.35) dark++;
+  }
+  twoTone = n > 0 && light / n > 0.08 && dark / n > 0.08;
   for (let i = 0; i < px.length; i += 4) {
     if (px[i + 3] === 0) [px[i], px[i + 1], px[i + 2]] = avg;
     px[i + 3] = 255;
@@ -391,11 +403,18 @@ function pixels(w, h, paint) {
 
 function applyColor() {
   params.tint = logoColor === "black" ? hexToRgb(tokens.getPropertyValue("--color-black")) : logoColor === "white" ? [1, 1, 1] : null;
+  params.reverse = reverseOn(params.background === "dark", logoColor);
+}
+
+// A dark two-tone logo on a dark background turns its lightness over: white letters on a dark plate become dark letters
+// on a light one, the way a brand's reversed logo does, and its colours keep their hue. Turned plain white, it would
+// lose its letters.
+function reverseOn(dark, color) {
+  return dark && twoTone && !fill && color === "original" && logoLuma < 0.3;
 }
 
 // --- Rendering ---
 
-let t0 = performance.now();
 let frame = 0;
 let last = 0;
 let lastTint = [0, 0, 0];
@@ -403,9 +422,44 @@ let lastTint = [0, 0, 0];
 const spinning = () => spin && params.sides !== "all";
 const animated = () => params.motion > 0 || spinning();
 
-function phaseAt(now) {
+function phaseAt() {
   if (soundOn) return clock;
-  return animated() ? ((now - t0) % PERIOD) / PERIOD : 0;
+  return animated() ? rest : 0;
+}
+
+// The glass doesn't play on its own, it answers. At rest its loop drifts at a third of its pace, listening; a touch, a
+// new logo, a setting or the cursor wakes it to full pace, and it settles back in a couple of seconds. A video without
+// sound still records the loop at full pace.
+let rest = 0; // the loop phase off the sound clock
+let awake = 1; // 1 just woken, 0 at rest
+const AT_REST = 0.3; // the loop's pace at rest
+function wake(amount = 1) {
+  awake = Math.max(awake, amount);
+}
+// After a new logo the glass settles on it, in under a second: the lens grows into the mark on an underdamped spring.
+let arrival = null;
+function arrive() {
+  wake(1);
+  if (reducedMotion) return;
+  arrival = { t: 0 };
+  kick();
+}
+function settled() {
+  if (!arrival) return 1;
+  const t = arrival.t;
+  const w = (2 * Math.PI) / 0.62;
+  const z = 0.72;
+  const wd = w * Math.sqrt(1 - z * z);
+  return 1 - Math.exp(-z * w * t) * (Math.cos(wd * t) + ((z * w) / wd) * Math.sin(wd * t));
+}
+function idle(dt) {
+  awake *= Math.exp(-dt / 1800);
+  rest = (rest + (dt / PERIOD) * (AT_REST + (1 - AT_REST) * awake)) % 1;
+  if (arrival) {
+    arrival.t += dt / 1000;
+    if (arrival.t > 1.4) arrival = null;
+  }
+  return !!arrival;
 }
 
 // Input state → numbers for the shader. The angle excludes spin; withTurn adds it.
@@ -432,6 +486,8 @@ function target(st) {
     frame: ICON_SCALE, // share of the frame the icon takes; trying Avatar or App Store on hover eases it to 1
     shadow: 1,
     facet: st.facets ? 1 : 0,
+    reverse: st.reverse ? 1 : 0,
+    dark: st.background === "dark" ? 1 : 0, // eases, so the glass and the page around it darken together
   };
 }
 
@@ -444,7 +500,7 @@ function withTurn(p, phase) {
 // Easing: each on-screen value chases its target with time constant EASE,
 // so the glass flows from square to circle and from one set of sides to another instead of jumping.
 const EASE = 90; // ms
-const EASED = ["n", "refraction", "dispersion", "edge", "motion", "size", "tintMix", "sideMix", "sideTwo", "angle", "spread", "liquid", "volume", "depth", "facet", "frame", "shadow"];
+const EASED = ["n", "refraction", "dispersion", "edge", "motion", "size", "tintMix", "sideMix", "sideTwo", "angle", "spread", "liquid", "volume", "depth", "facet", "frame", "shadow", "reverse", "dark"];
 let shown = null;
 
 function ease(goal, dt) {
@@ -462,8 +518,11 @@ function ease(goal, dt) {
     } else shown[key] = goal[key];
   }
   shown.tint = shown.tint.map((c, i) => c + (goal.tint[i] - c) * a);
-  shown.background = goal.background;
-  shown.bg = goal.bg;
+  // The background colour eases with the page's dark layer (see draw), so no square of the new colour shows first.
+  // Between light and dark the glass's shading turns over halfway; light to none is a switch, as before.
+  shown.bg = shown.bg.map((c, i) => c + (goal.bg[i] - c) * a);
+  if (shown.bg.every((c, i) => Math.abs(c - goal.bg[i]) < 1e-4)) shown.bg = goal.bg;
+  if ((goal.background === "dark") === (shown.dark > 0.5)) shown.background = goal.background;
   return moving;
 }
 
@@ -472,38 +531,72 @@ function previewSize() {
   return Math.min(Math.round(css * Math.min(devicePixelRatio, 2)), 1400);
 }
 
-// Sound on top of the settings, kept to the restraint of the still glass. A beat has one accent: the lens pulls
-// the logo into the rim and eases back. Bass thickens the slab a touch; the shader tints the rim fringe by band
-// and breathes the waves. Silent: the same object, nothing changes.
+// Sound on top of the settings, kept to the restraint of the still glass. The glass breathes with it: loudness draws
+// the lens in, so a voice moves it word by word, and a beat draws it further, the one accent. Bass thickens the slab a
+// touch, highs open the rim's fringe a little, pitch turns the light around the glass, and the shader tints the fringe
+// by band. Silent: the same object, nothing changes.
 function live(p) {
-  const { level, bass, hit, bands } = sound;
-  if (!level && !bass && !hit && !bands.some(Boolean)) return p;
+  const { level, bass, hit, bands, bright, pitch } = sound;
+  if (!level && !bass && !hit && !bright && pitch === 0.5 && !bands.some(Boolean)) return p;
   return {
     ...p,
-    volume: p.volume + 0.1 * bass,
-    refraction: p.refraction + 0.6 * hit,
-    sound: [level, bass, hit, 0],
+    volume: p.volume + 0.12 * bass,
+    refraction: p.refraction + 0.45 * hit + 0.35 * level,
+    sound: [0, bass, hit, 0],
     bands,
+    light: [(pitch - 0.5) * 1.8, 0, 0.6 * bright, 0],
   };
-}
-
-// The four newest tap ripples, as the shader takes them.
-function packDrops(list) {
-  const packed = new Float32Array(16);
-  list.slice(0, 4).forEach((d, i) => packed.set([d.x, d.y, d.age, d.amp], i * 4));
-  return packed;
 }
 
 // --- Lean and touch ---
 
-// The glass leans toward the cursor over the stage, or with the phone; a tap drops a ripple where it lands and rings the glass.
-// The lean moves the light inside the glass (the shader) and turns the whole glass a few degrees in perspective (the CSS
-// reads --lean-x and --lean-y off the canvas). Preview only: PNG and video come out upright and untouched.
-// Reduced motion turns lean and ripples off.
+// The glass leans toward the cursor over the stage, or with the phone. The lean moves the light inside the glass (the
+// shader) and turns the whole glass a few degrees in perspective (the CSS reads --lean-x and --lean-y off the canvas).
+// Preview only: PNG and video come out upright. Reduced motion turns the lean and the glass's answers to touch off.
 const tiltGoal = [0, 0];
 const tilt = [0, 0];
-let touches = []; // tap ripples, newest first: { x, y, age: s, amp }
 const LEAN = 320; // ms, how fast the glass follows: slow enough to feel heavy, like a slab of glass
+let held = null; // a finger on the glass: { x, y, px, py, time: s, speed, singing, played, note, field, damped }
+let lastHeld = { x: 0, y: 0 }; // where the last finger was, while the glass lets go under it
+let press = 0; // how far the glass gives under a held finger, 0..1
+const STILL = 0.3; // s: a finger that rests this long without moving damps its note; a slow click doesn't
+
+// The glass is a handpan (see tune.js): a ding in the middle and eight fields around it, hidden until played. A struck
+// field rings: the glass over it focuses and draws the logo into the rim near it, the way a beat does all round (the
+// ding reaches all round), and lets go as the note fades, low notes slower than high ones. Its octave elsewhere on the
+// glass answers faintly. e is how hard a field rings now, goal where its strike is rising to, att how fast it rises,
+// tau how long it rings.
+const fields = PAN.map((p, i) => ({ ...p, e: 0, goal: 0, att: 0.025, tau: 0.95 - 0.06 * i, damped: false }));
+let singGlow = 0; // the rim's glow while the glass sings, 0..1
+
+function strike(field, amount = 1, att = 0.025) {
+  const f = fields[PAN.indexOf(field)];
+  f.goal = Math.min(1.4, f.e + amount);
+  f.att = att;
+  f.damped = false;
+}
+
+function ring(dt) {
+  let on = false;
+  for (const f of fields) {
+    if (f.goal > f.e) {
+      f.e += (f.goal - f.e) * (1 - Math.exp(-dt / 1000 / f.att));
+      if (f.goal - f.e < 0.01) f.goal = 0;
+    } else f.e *= Math.exp(-dt / 1000 / (f.damped ? 0.07 : f.tau));
+    if (f.e < 0.002 && !f.goal) f.e = 0;
+    on ||= f.e > 0 || f.goal > 0;
+  }
+  const want = held?.singing && !reducedMotion ? held.speed : 0;
+  singGlow += (want - singGlow) * (1 - Math.exp(-dt / 150));
+  if (singGlow < 0.002 && !want) singGlow = 0;
+  return on || singGlow > 0;
+}
+
+const packed = new Float32Array(36);
+function packFields() {
+  fields.forEach((f, i) => packed.set([f.x, f.y, f.r, f.e], i * 4));
+  return packed;
+}
 
 function lean(dt) {
   const a = 1 - Math.exp(-dt / LEAN);
@@ -517,30 +610,69 @@ function lean(dt) {
   }
   canvas.style.setProperty("--lean-x", tilt[0].toFixed(4));
   canvas.style.setProperty("--lean-y", tilt[1].toFixed(4));
-  for (const t of touches) t.age += dt / 1000;
-  touches = touches.filter((t) => t.age < 1);
-  return moving || touches.length > 0;
+  if (held) {
+    const s = dt / 1000;
+    held.time += s;
+    // How fast the finger moves, in icon widths a second, smoothed: it sets how loud the glass sings.
+    const v = Math.hypot(held.x - held.px, held.y - held.py) / Math.max(s, 1e-3) / 2;
+    held.px = held.x;
+    held.py = held.y;
+    held.speed += (Math.min(1, v) - held.speed) * (1 - Math.exp(-s / 0.08));
+    // Resting still, the finger damps the note it struck, as a palm on a real handpan does.
+    if (!held.damped && !held.singing && held.played && held.time > STILL && held.speed < 0.08) {
+      held.damped = true;
+      sound.damp(held.note);
+      const f = fields[PAN.indexOf(held.field)];
+      if (f) f.damped = true;
+    }
+    // Drawn across the glass, the finger makes it sing, louder the faster it goes.
+    if (!held.singing && held.speed > 0.25) {
+      held.singing = true;
+      sound.sing(held.x, held.y);
+      tell("sing");
+    }
+    if (held.singing) sound.rub(held.speed);
+  }
+  const ringing = ring(dt);
+  const want = held && held.time > 0.12 && !reducedMotion ? 1 : 0;
+  press += (want - press) * (1 - Math.exp(-dt / (want ? 90 : 220)));
+  if (Math.abs(want - press) < 1e-3) press = want;
+  return moving || !!held || press > 0 || ringing;
 }
 
-function feel(p) {
-  if (!tilt[0] && !tilt[1] && !touches.length) return p;
-  const out = { ...p, tilt: [tilt[0], tilt[1]] };
-  if (touches.length) out.drops = packDrops(touches);
+// What the glass answers on top of the look: the lean, a new logo settling, struck fields, a held finger, singing.
+// upright: for the video, which keeps the answers to touch but not the lean.
+function feel(p, upright = false) {
+  if (arrival) {
+    const u = 1 - settled();
+    p = { ...p, refraction: p.refraction * (1 - 0.7 * u), liquid: p.liquid * (1 - 0.6 * u) };
+  }
+  const leans = !upright && (tilt[0] || tilt[1]);
+  const struck = fields.some((f) => f.e > 0);
+  if (!leans && !press && !struck && !singGlow) return p;
+  const out = leans ? { ...p, tilt: [tilt[0], tilt[1]] } : { ...p };
+  if (struck) out.fields = packFields();
+  // Singing lights the rim.
+  if (singGlow) {
+    const l = p.light ?? [0, 0, 0, 0];
+    out.light = [l[0], l[1] + 0.6 * singGlow, l[2], l[3]];
+  }
+  if (press) out.press = held ? [held.x, held.y, press, 0.24] : [lastHeld.x, lastHeld.y, press, 0.24];
   return out;
 }
 
-// One sound step. With sound on, the loop clock runs a little faster when it's loud, so the waves move with the music.
-// The phase is handed over both ways, so turning sound on or off doesn't make the glass jump.
+// One sound step. With sound on, the loop runs on its own clock at full pace: the music keeps the glass awake. The phase
+// is handed over both ways, so turning sound on or off doesn't make the glass jump.
 function listen(now, dt) {
   const on = sound.mode !== "off";
   if (on !== soundOn) {
-    if (on) clock = phaseAt(now);
-    else t0 = now - clock * PERIOD;
+    if (on) clock = phaseAt();
+    else rest = clock;
     soundOn = on;
   }
   const alive = sound.update(dt);
   showBars();
-  if (soundOn) clock = (clock + (dt / PERIOD) * (1 + 0.4 * sound.level)) % 1;
+  if (soundOn) clock = (clock + dt / PERIOD) % 1;
   return alive;
 }
 
@@ -548,8 +680,9 @@ function listen(now, dt) {
 function draw() {
   if (recording) return;
   if (!shown) shown = target(params);
+  root.style.setProperty("--dark", shown.dark.toFixed(3)); // the page's dark layer, in step with the glass
   renderer.setSize(previewSize());
-  const phase = phaseAt(performance.now());
+  const phase = phaseAt();
   renderer.render(withTurn(feel(live(shown)), phase), phase);
 }
 
@@ -560,9 +693,10 @@ function loop(now) {
   const moving = ease(goal(), dt);
   const hearing = listen(now, dt);
   const leaning = lean(dt);
+  const landing = idle(dt);
   last = now;
   draw();
-  if (moving || animated() || hearing || leaning) frame = requestAnimationFrame(loop);
+  if (moving || animated() || hearing || leaning || landing) frame = requestAnimationFrame(loop);
 }
 
 // What the stage eases toward: the settings, or what the mouse is trying on (see "Try on hover").
@@ -601,7 +735,7 @@ function setHome(input, value) {
 }
 
 // Read values from the inputs: the browser may restore them after a reload.
-for (const input of root.querySelectorAll("input[type=range]")) {
+for (const input of root.querySelectorAll("input[type=range]:not([name=clip])")) {
   const box = input.parentElement;
   const val = box.querySelector(".val");
   let dragging = false;
@@ -712,6 +846,7 @@ function fitColorToBackground() {
 // The logo colour a background calls for, from the current one. Trying a preset on uses it too, so it shows what a click gives.
 function colorOn(dark) {
   if (fill) return logoColor;
+  if (dark && twoTone && logoColor === "original") return "original"; // it turns over instead (see reverseOn)
   const pale = logoLuma > 0.85;
   if (dark && (logoColor === "black" || (logoColor === "original" && logoLuma < 0.3))) return "white";
   if (!dark && logoColor === "white") return autoColor && !pale ? "original" : "black";
@@ -796,16 +931,96 @@ document.addEventListener("drop", (e) => {
 
 // --- Sound ---
 
-// Off, Demo, Mic or Track. Demo is a glass tune made in the browser, no permission or file needed.
+// Off, Lofi, Mic or Track. Lofi (the "demo" mode in the code) is a loop made in the browser, no permission or file needed.
 // Track plays a file, picked with Track itself or dropped on the page.
 const soundRadio = (mode) => root.querySelector(`input[name=sound][value=${mode}]`);
 const trackRadio = soundRadio("track");
 function showSound(mode) {
   soundRadio(mode).checked = true;
   showCaption();
+  showClip();
 }
 
-// While sound plays, its eight bands run at the right end of the Sound heading: the same bands that colour the fringe.
+// --- Track: which 12 seconds ---
+
+// With a track, the strip under Sound picks the part a video takes. It opens on the strongest 12 s, marked by the
+// detent; dragging snaps back near it like any slider, and letting go plays from the new start.
+const clipBox = root.querySelector("[data-clip]");
+const clipInput = clipBox.querySelector("input");
+const clipTime = clipBox.querySelector("[data-clip-time]");
+const clipVal = clipBox.querySelector(".val");
+const waveCanvas = clipBox.querySelector("canvas");
+const mmss = (t) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}`;
+const clipSpan = () => Math.max(0, sound.duration - CLIP / 1000);
+let clipDragging = false;
+let clipTold = false;
+
+function showClip() {
+  const on = root.querySelector("input[name=sound]:checked")?.value === "track" && clipSpan() > 0 && !!sound.wave;
+  clipBox.hidden = !on;
+  if (!on) return;
+  setHome(clipInput, sound.best / clipSpan());
+  clipInput.value = String(sound.clip / clipSpan());
+  labelClip();
+  drawWave();
+}
+
+function labelClip() {
+  clipBox.style.setProperty("--p", clipInput.value);
+  clipTime.textContent = mmss(sound.clip);
+  const span = `${mmss(sound.clip)}–${mmss(sound.clip + CLIP / 1000)}`;
+  clipVal.dataset.v = span;
+  clipInput.setAttribute("aria-valuetext", span); // a screen reader hears the times, not a number from 0 to 1
+}
+
+// The song's loudness as thin bars, light along the tray like the ruler on the other sliders.
+function drawWave() {
+  const w = waveCanvas.clientWidth;
+  const h = waveCanvas.clientHeight;
+  if (!w || !sound.wave) return;
+  const dpr = Math.min(devicePixelRatio, 2);
+  waveCanvas.width = Math.round(w * dpr);
+  waveCanvas.height = Math.round(h * dpr);
+  const g = waveCanvas.getContext("2d");
+  g.scale(dpr, dpr);
+  g.fillStyle = "rgba(10, 10, 10, 0.3)";
+  const count = Math.floor(w / 3);
+  for (let i = 0; i < count; i++) {
+    const v = sound.wave[Math.floor((i / count) * sound.wave.length)];
+    const bh = Math.max(1, v * h);
+    g.fillRect(i * 3, (h - bh) / 2, 1, bh);
+  }
+}
+
+clipInput.addEventListener("input", () => {
+  if (clipDragging && Math.abs(Number(clipInput.value) - Number(clipInput.dataset.home)) < SNAP) clipInput.value = clipInput.dataset.home;
+  sound.clip = Number(clipInput.value) * clipSpan();
+  labelClip();
+});
+// The track jumps to t and plays from there once it's ready, or after a moment if the browser doesn't say.
+function seekTo(t) {
+  return new Promise((done) => {
+    sound.audio.addEventListener("seeked", done, { once: true });
+    setTimeout(done, 400);
+    sound.audio.currentTime = t;
+  });
+}
+clipInput.addEventListener("change", () => {
+  if (sound.mode === "track" && !recording) sound.audio.currentTime = sound.clip;
+  if (!clipTold) tell("track:pick");
+  clipTold = true;
+});
+clipInput.addEventListener("pointerdown", () => (clipDragging = true));
+for (const type of ["pointerup", "pointercancel", "blur"]) clipInput.addEventListener(type, () => (clipDragging = false));
+clipInput.addEventListener("dblclick", () => {
+  clipInput.value = clipInput.dataset.home;
+  clipInput.dispatchEvent(new Event("input"));
+  clipInput.dispatchEvent(new Event("change"));
+});
+sound.onStudy = () => showClip();
+new ResizeObserver(() => !clipBox.hidden && drawWave()).observe(clipBox);
+
+// While sound plays, its eight bands run right by the word Sound: the same bands that colour the fringe.
 const bars = document.createElement("span");
 bars.className = "bars";
 bars.setAttribute("aria-hidden", "true");
@@ -815,7 +1030,7 @@ root.querySelector("[data-sound-head]").append(bars);
 function showBars() {
   const on = sound.mode !== "off" && !reducedMotion;
   bars.hidden = !on;
-  if (on) sound.bands.forEach((b, i) => (bars.children[i].style.transform = `scaleY(${(0.15 + 0.85 * b).toFixed(3)})`));
+  if (on) sound.bands.forEach((b, i) => (bars.children[i].style.transform = `scaleY(${(0.3 + 0.7 * b).toFixed(3)})`));
 }
 
 // Each key says in small print what you'll get: which PNG, and a video that's the loop, one round of the tune,
@@ -825,7 +1040,7 @@ const videoLength = root.querySelector("[data-video-spec]").lastChild; // the te
 function showCaption() {
   const mode = root.querySelector("input[name=sound]:checked")?.value ?? "off";
   pngSpec.textContent = imageFormat().spec;
-  videoLength.textContent = mode === "off" ? "4 s" : mode === "demo" ? "9.6 s with sound" : "12 s with sound";
+  videoLength.textContent = mode === "off" ? "4 s" : mode === "demo" ? `${LOOP} s with sound` : "12 s with sound";
   caption.textContent = mode === "mic" || mode === "track" ? "Your logo and sound never leave your browser." : "Your logo never leaves your browser.";
 }
 for (const input of root.querySelectorAll("input[name=image]")) {
@@ -865,7 +1080,7 @@ function soundError(mode, e) {
     if (name === "NotReadableError") return "The mic is busy in another app.";
     return "Couldn't start the mic.";
   }
-  if (mode === "demo") return "Couldn't play the demo in this browser.";
+  if (mode === "demo") return "Couldn't play Lofi in this browser.";
   if (name === "NotAllowedError") return `${touch ? "Tap" : "Click"} Track to play it.`; // mostly after a drop, which is a mouse gesture
   return "Couldn't play that file. Try MP3, M4A or WAV.";
 }
@@ -878,7 +1093,7 @@ for (const input of root.querySelectorAll("input[name=sound]")) {
   });
 }
 
-// The demo tune renders in the background after the first touch anywhere on the page, so Demo starts without a wait.
+// The loop renders in the background after the first touch anywhere on the page, so Lofi starts without a wait.
 function warmUp() {
   removeEventListener("pointerdown", warmUp);
   removeEventListener("keydown", warmUp);
@@ -920,8 +1135,11 @@ if (!reducedMotion) {
       return void kick();
     }
     const r = canvas.getBoundingClientRect();
-    tiltGoal[0] = clamp1(((e.clientX - r.left) / r.width - 0.5) * 2);
-    tiltGoal[1] = clamp1(-((e.clientY - r.top) / r.height - 0.5) * 2);
+    const x = clamp1(((e.clientX - r.left) / r.width - 0.5) * 2);
+    const y = clamp1(-((e.clientY - r.top) / r.height - 0.5) * 2);
+    wake(Math.min(1, Math.hypot(x - tiltGoal[0], y - tiltGoal[1]) * 4));
+    tiltGoal[0] = x;
+    tiltGoal[1] = y;
     kick();
   });
   stageWrap.addEventListener("pointerleave", () => {
@@ -931,14 +1149,17 @@ if (!reducedMotion) {
 }
 
 // On a phone, the glass leans with the phone. Rest is how it's held: it drifts to the current grip in a couple of seconds.
-let rest = null;
+let grip = null;
 function onOrient(e) {
   if (e.beta == null || e.gamma == null) return;
-  rest ??= { beta: e.beta, gamma: e.gamma };
-  rest.beta += (e.beta - rest.beta) * 0.01;
-  rest.gamma += (e.gamma - rest.gamma) * 0.01;
-  tiltGoal[0] = clamp1((e.gamma - rest.gamma) / 20);
-  tiltGoal[1] = clamp1(-(e.beta - rest.beta) / 20);
+  grip ??= { beta: e.beta, gamma: e.gamma };
+  grip.beta += (e.beta - grip.beta) * 0.01;
+  grip.gamma += (e.gamma - grip.gamma) * 0.01;
+  const x = clamp1((e.gamma - grip.gamma) / 20);
+  const y = clamp1(-(e.beta - grip.beta) / 20);
+  wake(Math.min(1, Math.hypot(x - tiltGoal[0], y - tiltGoal[1]) * 3));
+  tiltGoal[0] = x;
+  tiltGoal[1] = y;
   kick();
 }
 
@@ -959,28 +1180,101 @@ tiltButton.addEventListener("click", async () => {
   }
 });
 
-// A tap on the glass: a ripple from that spot on the press, and a quiet glass note on the release.
-// The note waits for the release because iPhone only lets audio start there, and a touch that turns into
-// a scroll never releases on the canvas, so scrolling past the icon stays silent. Not while sound is on.
-let pressed = false;
-canvas.addEventListener("pointerdown", (e) => {
-  pressed = false;
-  if (recording) return;
+// Playing the glass. A tap strikes the field under it: its note sounds and the glass answers there. A finger left resting
+// damps the note; drawn across the glass, it makes the glass sing. The canvas takes the touch for itself (touch-action:
+// none), so playing never scrolls the page. Taps go on during a recording, and over Lofi their notes are recorded too.
+const iconPoint = (e) => {
   const r = canvas.getBoundingClientRect();
-  const x = (((e.clientX - r.left) / r.width - 0.5) * 2) / ICON_SCALE;
-  const y = (-((e.clientY - r.top) / r.height - 0.5) * 2) / ICON_SCALE;
+  return [(((e.clientX - r.left) / r.width - 0.5) * 2) / ICON_SCALE, (-((e.clientY - r.top) / r.height - 0.5) * 2) / ICON_SCALE];
+};
+root.addEventListener("input", () => wake(0.8));
+root.addEventListener("change", () => wake(0.8));
+canvas.addEventListener("pointerdown", (e) => {
+  const [x, y] = iconPoint(e);
   if (Math.hypot(x, y) > 1.3) return; // the shadow and the margin, not the glass
-  pressed = true;
+  wake(1);
+  // Once the page may play sound, the note starts on the press, so a tune can be played in time; the very first touch
+  // only starts sound on its release (iPhone allows no earlier).
+  const played = sound.ready;
+  const note = played ? sound.touch(x, y) : null;
+  const field = fieldAt(x, y);
   tell("tap");
-  if (reducedMotion) return;
-  touches = [{ x, y, age: 0, amp: 1.6 }, ...touches].slice(0, 4);
+  if (!reducedMotion) {
+    strike(field);
+    const twin = PAN.find((o) => o !== field && o.midi % 12 === field.midi % 12);
+    if (twin) strike(twin, 0.22, 0.09);
+    kick();
+  }
+  // A second finger plays its note and nothing more: the first one keeps the hold, the damping and the singing.
+  if (held) return;
+  // The finger's release comes back to the glass even if it leaves it.
+  canvas.setPointerCapture?.(e.pointerId);
+  held = { id: e.pointerId, x, y, px: x, py: y, time: 0, speed: 0, singing: false, played, note, field, damped: false };
+  lastHeld = { x, y };
+});
+canvas.addEventListener("pointermove", (e) => {
+  if (held?.id !== e.pointerId) return;
+  [held.x, held.y] = iconPoint(e);
+  lastHeld = { x: held.x, y: held.y };
+});
+function release(up) {
+  if (held.singing) sound.hush();
+  else if (up && !held.played) sound.touch(held.x, held.y);
+  held = null;
   kick();
-});
-canvas.addEventListener("pointerup", () => {
-  if (pressed) sound.chime();
-  pressed = false;
-});
-canvas.addEventListener("pointercancel", () => (pressed = false));
+}
+canvas.addEventListener("pointerup", (e) => held?.id === e.pointerId && release(true));
+canvas.addEventListener("pointercancel", (e) => held?.id === e.pointerId && release(false));
+canvas.addEventListener("lostpointercapture", (e) => held?.id === e.pointerId && release(false));
+
+// --- Full screen ---
+
+// A small key at the end of the Sound row: only the glass, centred and as large as the screen allows, for a screen
+// recording, a stream or a screen by the speakers. The way back is a key in the screen's corner, Esc, or leaving the
+// browser's full screen. Where a page can't take the whole screen (iPhone), the panel just steps aside.
+// The browser takes the screen first, asked right in the click as it requires: a view transition is cancelled if the
+// window changes size under it. Meanwhile the panel fades, so the bigger window shows the glass alone; then the glass
+// travels to the middle of the screen (a view transition) in the window it ends up in. The way back is the same.
+const fullKey = root.querySelector("[data-full]");
+const exitKey = root.querySelector("[data-full-exit]");
+function setFull(on) {
+  if (root.classList.contains("is-full") === on) return;
+  if (on) tell("full");
+  // Leaving the browser's full screen: its own event brings the page back (below), so the way back runs once.
+  if (!on && document.fullscreenElement) return void document.exitFullscreen?.().catch(() => showFull(false));
+  const screen = on ? document.documentElement.requestFullscreen?.() : null;
+  if (!screen) return showFull(on);
+  if (!reducedMotion) root.classList.add("is-going-full");
+  screen.then(() => showFull(true), () => showFull(true));
+}
+function showFull(on) {
+  if (root.classList.contains("is-full") === on) return;
+  const change = () => {
+    const wasOnExit = document.activeElement === exitKey;
+    root.classList.toggle("is-full", on);
+    root.classList.remove("is-going-full");
+    // The keyboard goes where the way on is: to the exit key, and back to the full-screen key.
+    if (on) exitKey.focus({ preventScroll: true });
+    else if (wasOnExit || document.activeElement === document.body) fullKey.focus({ preventScroll: true });
+    draw();
+    kick();
+  };
+  if (reducedMotion || !document.startViewTransition) change();
+  else document.startViewTransition(change);
+}
+fullKey.addEventListener("click", () => setFull(true));
+exitKey.addEventListener("click", () => setFull(false));
+document.addEventListener("fullscreenchange", () => !document.fullscreenElement && showFull(false));
+addEventListener("keydown", (e) => e.key === "Escape" && setFull(false));
+// After a moment without the mouse, the key and the cursor step aside (see the styles: only with a mouse).
+let restTimer = 0;
+const unrest = () => {
+  root.classList.remove("is-resting");
+  clearTimeout(restTimer);
+  restTimer = setTimeout(() => root.classList.add("is-resting"), 2200);
+};
+addEventListener("pointermove", unrest);
+addEventListener("pointerdown", unrest);
 
 // --- Presets ---
 
@@ -1041,6 +1335,7 @@ function lookOf(preset, still = false) {
     volume: slab,
     depth: preset.checks.volume ? 1 : 0,
     facets: preset.checks.facets,
+    reverse: reverseOn(dark, color),
   });
   lastTint = keepTint; // target() remembers the last tint for easing; a thumbnail mustn't change it
   return { ...look, angle: (angle / 180) * Math.PI };
@@ -1057,6 +1352,9 @@ function renderThumbs() {
 }
 
 function paintThumb(thumb, preset) {
+  const round = preset.radios.shape === "circle";
+  thumb.classList.toggle("is-round", round);
+  thumb.closest(".slot")?.classList.toggle("is-round", round);
   const look = lookOf(preset, true);
   renderer.setSize(192);
   renderer.render({ ...look, ...(look.background === "light" ? { background: "none" } : {}), frame: 1, shadow: 0 }, 0);
@@ -1435,7 +1733,7 @@ pngButton.addEventListener("click", () => {
   const format = imageFormat();
   const out = document.createElement("canvas");
   out.width = out.height = format.px;
-  const phase = phaseAt(performance.now());
+  const phase = phaseAt();
   const look = target({
     ...params,
     ...(format.shape ? { shape: format.shape } : {}),
@@ -1509,9 +1807,11 @@ videoButton.addEventListener("click", async () => {
   const type = typeof MediaRecorder === "undefined" ? undefined : types.find((t) => MediaRecorder.isTypeSupported(t));
   if (!type) return say("This browser can't record video. Try Chrome or Safari.");
   const demo = sound.mode === "demo";
-  const length = !audio ? PERIOD : demo ? TUNE_LENGTH * 1000 : CLIP;
+  const length = !audio ? PERIOD : demo ? LOOP * 1000 : CLIP;
 
   recording = true;
+  arrival = null; // a logo still settling would freeze half-settled in the video
+  clipInput.disabled = true; // the part being recorded stays the part the strip shows
   // Must reset: otherwise kick() after recording thinks the loop is alive, and the preview freezes.
   cancelAnimationFrame(frame);
   frame = 0;
@@ -1561,22 +1861,27 @@ videoButton.addEventListener("click", async () => {
     recorder.ondataavailable = (e) => e.data.size && chunks.push(e.data);
     const done = new Promise((resolve) => (recorder.onstop = () => resolve()));
 
-    // In Demo the video is one round of the tune from its first beat, so the first second already moves.
+    // In Lofi the video is one round of the loop from its first beat, so the first second already moves.
     if (demo) await sound.rewind();
-    // A track whose autoplay was refused would record silence; this tap counts as the one it waited for.
-    if (sound.mode === "track" && sound.audio.paused) await sound.audio.play().catch(() => {});
+    // A track records the part picked on the strip. One whose autoplay was refused would record silence: this tap
+    // counts as the one it waited for, and play() goes first, since iPhone refuses it after an await.
+    const playing = sound.mode === "track" && sound.audio.paused ? sound.audio.play().catch(() => {}) : null;
+    if (sound.mode === "track" && sound.wave) await seekTo(sound.clip);
+    await playing;
     recorder.start();
     const start = performance.now();
     let prev = start;
     await new Promise((resolve) => {
       const tick = (now) => {
         const elapsed = now - start;
+        // Taps go on during a recording: the glass's answers are in the picture, and over Lofi their notes in the sound.
+        lean(now - prev);
         if (audio) {
           // The sound keeps driving the glass while recording, on the same clock as the preview.
           listen(now, now - prev);
-          paint(clock, live(base));
+          paint(clock, feel(live(base), true));
         } else {
-          paint(Math.min(elapsed / PERIOD, 1) % 1);
+          paint(Math.min(elapsed / PERIOD, 1) % 1, feel(base, true));
         }
         prev = now;
         if (elapsed < length) requestAnimationFrame(tick);
@@ -1604,10 +1909,10 @@ videoButton.addEventListener("click", async () => {
       : "This browser can't record video. Try Chrome or Safari.";
   } finally {
     recording = false;
+    clipInput.disabled = false;
     root.classList.remove("is-recording");
     videoButton.disabled = pngButton.disabled = false;
     say(message);
-    t0 = performance.now();
     frame = 0;
     kick();
   }

@@ -43,6 +43,13 @@ body {
   margin: 0;
   padding: 20px 24px;
 }
+/* The panel sits between the stage and the page edge with the same 32 px on both sides of it, which shows when the
+   stage goes dark out to the edges. */
+@media (min-width: 761px) {
+  body {
+    padding-right: 32px;
+  }
+}
 .bottom a {
   color: inherit;
   text-decoration: none;
@@ -58,7 +65,7 @@ body {
     "stage foot";
   /* On a screen taller than the panel, the spare height goes under the footer, not between the title and the panel. */
   grid-template-rows: auto auto 1fr;
-  gap: 24px 40px;
+  gap: 24px 32px;
   align-items: start;
 }
 /* Title above the panel, in the right column. The title, the panel and the footer share one left edge. */
@@ -87,20 +94,17 @@ h1 {
   isolation: isolate;
 }
 /* With a dark background the whole stage goes dark, out to the page edges (past the body's 20 / 24 px padding): the glass
-   hangs in the dark instead of sitting on a black card. Trying a dark look on with the mouse previews it (app.js sets
-   data-tone from what the stage shows). The panel stays light. */
+   hangs in the dark instead of sitting on a black card. Trying a dark look on with the mouse previews it. The layer's
+   opacity is --dark, which app.js eases in the same frames as the glass's own background, so the two never part.
+   The panel stays light. */
 .stage-wrap::before {
   content: "";
   position: absolute;
   z-index: -1;
   inset: -20px 0 -20px -24px;
   background: var(--color-black);
-  opacity: 0;
-  transition: opacity 200ms ease-out;
+  opacity: var(--dark, 0);
   pointer-events: none;
-}
-[data-tone="dark"] .stage-wrap::before {
-  opacity: 1;
 }
 [data-tone="dark"] .presets span {
   color: color-mix(in srgb, var(--color-off-white) 62%, transparent);
@@ -162,7 +166,8 @@ h1 {
 }
 .stage canvas {
   display: block;
-  cursor: pointer; /* a tap ripples the glass */
+  cursor: pointer; /* the glass is played */
+  touch-action: none; /* the glass is played: a finger held or drawn on it plays, it doesn't scroll the page */
   width: 100%;
   height: 100%;
   border-radius: 24px;
@@ -298,6 +303,121 @@ h1 {
 }
 .tilt[hidden] {
   display: none;
+}
+/* Full screen: a small quiet key at the end of a heading row, out of the stage. In full screen its counterpart, the way
+   back, sits in the screen's corner. */
+.full {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin-left: 10px;
+  padding: 0;
+  border-radius: 9px;
+  background: linear-gradient(180deg, #fff 0%, var(--panel) 100%);
+  box-shadow: var(--raise);
+  color: color-mix(in srgb, var(--ink) 70%, transparent);
+}
+.full:hover {
+  color: var(--ink);
+}
+.full svg path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.full:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+  opacity: 1;
+}
+/* At the end of the Sound heading. A phone shows the glass large already, and there the heading sits under the stage,
+   so the key is for larger screens. */
+.group .full {
+  order: 2;
+  margin-left: auto;
+}
+@media (max-width: 760px) {
+  .group .full {
+    display: none;
+  }
+}
+/* The live bars sit right by the word, standing on its baseline: they are the sound itself. The key keeps its place at
+   the end. */
+.group .bars {
+  order: 1;
+  height: 10px;
+  margin: 1px 0 0 7px;
+}
+
+.full.exit {
+  display: none;
+}
+.is-full .full.exit {
+  display: grid;
+  position: fixed;
+  z-index: 21;
+  top: 16px;
+  right: 16px;
+  margin: 0;
+  transition: opacity 200ms ease-out;
+}
+[data-tone="dark"].is-full .full.exit {
+  background: color-mix(in srgb, #fff 12%, transparent);
+  color: var(--color-off-white);
+}
+/* In full screen only the glass stays, centred and as large as the screen allows, on the colour of its background.
+   After a moment without the mouse, the key and the cursor step aside. */
+.is-full .intro,
+.is-full .controls,
+.is-full .bottom,
+.is-full .looks {
+  display: none;
+}
+/* While the browser takes the screen, everything but the glass fades out of the way. */
+.is-going-full .intro,
+.is-going-full .controls,
+.is-going-full .bottom,
+.is-going-full .looks {
+  opacity: 0;
+  transition: opacity 160ms ease-out;
+}
+.is-full .stage-wrap {
+  position: fixed;
+  z-index: 20;
+  inset: 0;
+  background: var(--color-off-white);
+}
+.is-full .stage-sticky {
+  position: static;
+  height: 100%;
+}
+.is-full .stage {
+  width: min(92vw, 92svh);
+}
+/* Only with a mouse: a touch screen has nothing to move to bring them back. */
+@media (hover: hover) {
+  .is-full.is-resting .full.exit {
+    opacity: 0;
+  }
+  .is-full.is-resting .stage canvas {
+    cursor: none;
+  }
+}
+/* Into full screen and back, the glass travels between its place and the middle of the screen and grows or shrinks,
+   while the rest of the page fades (a view transition; without one, the change is plain). */
+.stage canvas {
+  view-transition-name: glass;
+}
+::view-transition-group(glass) {
+  animation-duration: 560ms;
+  animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 320ms;
 }
 /* The logo row: Upload and the folded text field share one line and trade widths when the field opens.
    The columns are lengths, not fr, so the trade animates. */
@@ -512,7 +632,8 @@ button:active {
   box-shadow: inset 0 1px 2px color-mix(in srgb, var(--color-black) 7%, transparent),
     inset 0 0 0 0.5px color-mix(in srgb, var(--color-black) 6%, transparent);
 }
-/* The scale, a ruler: a short tick every 12 px and a long one every 60, light along the whole length, darker where passed. */
+/* The scale, a ruler: a long tick every 60 px and four short ones between, light along the whole length, darker where
+   passed. The short ticks skip the places of the long ones, so no tick is drawn over another. */
 .range::before,
 .range::after {
   --tick: color-mix(in srgb, var(--color-black) 9%, transparent);
@@ -524,12 +645,40 @@ button:active {
   bottom: 11px;
   background:
     repeating-linear-gradient(90deg, var(--tick) 0 1px, transparent 1px 60px) 0 0 / 100% 100% no-repeat,
-    repeating-linear-gradient(90deg, var(--tick) 0 1px, transparent 1px 12px) 0 50% / 100% 6px no-repeat;
+    repeating-linear-gradient(90deg, transparent 0 12px, var(--tick) 12px 13px, transparent 13px 24px, var(--tick) 24px 25px,
+        transparent 25px 36px, var(--tick) 36px 37px, transparent 37px 48px, var(--tick) 48px 49px, transparent 49px 60px)
+      0 50% / 100% 6px no-repeat;
   pointer-events: none;
+}
+/* Where the browser can round, the ruler is a whole number of 60 px steps, centred: it starts and ends on a long tick,
+   the same distance from both ends of the tray. */
+@supports (width: round(down, 100px, 60px)) {
+  .range::before,
+  .range::after {
+    --len: calc(round(down, 100% - 32px, 60px) + 1px);
+    left: round(down, (100% - var(--len)) / 2, 1px);
+    right: auto;
+    width: var(--len);
+  }
 }
 .range::after {
   --tick: color-mix(in srgb, var(--color-black) 20%, transparent);
   clip-path: inset(0 calc((1 - var(--p)) * 100%) 0 0);
+}
+/* The part of a track a video takes: the song's loudness on the tray instead of the ruler, the pill is the 12 seconds
+   and says where they start; the detent marks the strongest part, where it starts on its own. */
+.range.clip[hidden] {
+  display: none;
+}
+.range.clip::before,
+.range.clip::after {
+  display: none;
+}
+.range.clip canvas {
+  position: absolute;
+  inset: 8px 16px;
+  width: calc(100% - 32px);
+  height: calc(100% - 16px);
 }
 /* The detent: a dot on the tray under where the look put the thumb. It's hidden while the thumb sits on it. */
 .detent {
@@ -639,6 +788,11 @@ fieldset {
 }
 .group.rule {
   padding-top: 8px;
+}
+.group h2 {
+  margin: 0;
+  font: inherit;
+  letter-spacing: inherit;
 }
 /* Random, the sixth key: an empty well with a die until the first roll, then the roll itself, with the die on its corner.
    Selected, it's raised like a preset. The die turns a third of a turn per roll. */
@@ -1213,7 +1367,7 @@ button:disabled {
     background-size: 100% 100%, auto;
   }
 }
-/* The sound meter at the right end of the Sound heading: eight thin bars, ink colour, growing from the baseline. */
+/* The sound meter by the word Sound: eight thin bars, ink colour, growing from the baseline. */
 .bars {
   display: inline-flex;
   align-items: flex-end;
@@ -1224,12 +1378,14 @@ button:disabled {
 .bars[hidden] {
   display: none;
 }
+/* A quiet band is a short stub, not a dot, and the bars are a shade lighter than the word, so the row reads as one
+   small meter. */
 .bars i {
   width: 2px;
   height: 100%;
   border-radius: 1px;
-  background: currentColor;
-  transform: scaleY(0.15);
+  background: color-mix(in srgb, currentColor 55%, transparent);
+  transform: scaleY(0.3);
   transform-origin: bottom;
 }
 /* Each preset key shows your own logo in that look: a small glass over the name. */
@@ -1249,6 +1405,11 @@ button:disabled {
   width: var(--thumb);
   height: var(--thumb);
   border-radius: calc(var(--thumb) * 0.24); /* the glass's own corner; it also hides the dark corners of the Night key */
+}
+/* A round look (Lens, or a round roll) gets a round key glass, so its lift and shadow follow the circle. */
+.presets canvas.is-round,
+.slot.is-round .well {
+  border-radius: 50%;
 }
 /* The glass stays at full strength on every key; only the names of the unselected ones dim. */
 .presets span {
@@ -1454,15 +1615,11 @@ button:disabled {
     margin-inline: -24px;
     width: calc(100% + 48px);
     padding: 8px 24px 10px;
-    background: var(--color-off-white);
-    transition: background-color 200ms ease-out;
+    background: color-mix(in srgb, var(--color-black) calc(var(--dark, 0) * 100%), var(--color-off-white));
   }
-  /* A dark stage is this pinned band itself, edge to edge; nothing fades out under it. */
+  /* A dark stage is this pinned band itself, edge to edge, darkening with the glass; nothing fades out under it. */
   .stage-wrap::before {
     content: none;
-  }
-  [data-tone="dark"] .stage-wrap {
-    background-color: var(--color-black);
   }
   [data-tone="dark"] .stage-wrap::after {
     display: none;

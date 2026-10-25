@@ -23,6 +23,8 @@
           <div class="stage" data-stage>
             <canvas aria-label="Glass icon preview"></canvas>
             <button type="button" class="soft tilt" data-tilt hidden>Tilt the glass</button>
+            <!-- In full screen, the way back: the screen's corner, there while the mouse moves. -->
+            <button type="button" class="full exit" data-full-exit aria-label="Exit full screen" title="Exit full screen"><svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><path d="M8 4v4H4M12 4v4h4M8 16v-4H4M12 16v-4h4" /></svg></button>
             <p class="unsupported">WebGL isn't working in this browser, so the glass can't render.</p>
           </div>
           <!-- Under the glass: the presets, each key your own logo in that look, and a sixth key for a look of its own.
@@ -77,16 +79,24 @@
           </div>
         </fieldset>
 
-        <h2 class="group" data-sound-head>Sound</h2>
+        <!-- The Sound row: the name, the live bars while sound plays (added from code), and the full-screen key, kept out of
+             the heading so the heading reads as just "Sound". -->
+        <div class="group" data-sound-head>
+          <h2>Sound</h2>
+          <!-- Full screen: only the glass, for a screen recording, a stream or a screen by the speakers. -->
+          <button type="button" class="full" data-full aria-label="Full screen" title="Full screen"><svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><path d="M4 8V4h4M16 8V4h-4M4 12v4h4M16 12v4h-4" /></svg></button>
+        </div>
         <fieldset>
           <legend class="sr">Sound</legend>
           <div class="seg">
             <label><input type="radio" name="sound" value="off" checked /><span>Off</span></label>
-            <label><input type="radio" name="sound" value="demo" /><span>Demo</span></label>
+            <label><input type="radio" name="sound" value="demo" /><span>Lofi</span></label>
             <label><input type="radio" name="sound" value="mic" /><span>Mic</span></label>
             <label><input type="radio" name="sound" value="track" /><span>Track</span></label>
           </div>
         </fieldset>
+        <!-- With a track: the part a video takes, 12 s, over the song's loudness. It starts on the strongest part. -->
+        <label class="range clip" data-clip hidden><input type="range" name="clip" min="0" max="1" step="any" value="0" aria-label="Part of the track to record" /><canvas aria-hidden="true"></canvas><span class="thumb"><span class="name" data-clip-time></span><span class="val" aria-hidden="true"></span></span><i class="detent" aria-hidden="true"></i></label>
         <input type="file" class="track-input" accept="audio/*,.mp3,.m4a,.aac,.wav,.ogg,.flac" data-track tabindex="-1" aria-label="Pick a track" />
 
         <details class="advanced" data-advanced>
