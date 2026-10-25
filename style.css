@@ -539,6 +539,14 @@ button:active {
   background: linear-gradient(180deg, #fff 0%, var(--panel) 100%);
   box-shadow: var(--raise);
   pointer-events: none;
+  transition: transform 180ms cubic-bezier(0.3, 1.3, 0.4, 1), box-shadow 180ms ease-out;
+}
+/* Grabbed, the thumb lifts a little off the tray: a touch larger, a longer shadow. */
+.range:has(input:active) .thumb {
+  transform: scale(1.045);
+  box-shadow: inset 0 1px 0 #fff, 0 0 0 0.5px color-mix(in srgb, var(--color-black) 10%, transparent),
+    0 2px 4px color-mix(in srgb, var(--color-black) 8%, transparent),
+    0 10px 20px -8px color-mix(in srgb, var(--color-black) 28%, transparent);
 }
 .thumb > span {
   grid-area: 1 / 1;
@@ -637,6 +645,16 @@ fieldset {
 .slot svg {
   transform: rotate(var(--turn, 0deg));
   transition: transform 480ms cubic-bezier(0.3, 1.4, 0.5, 1);
+}
+/* A new roll comes into its key with a small turn, instead of being swapped in. */
+.slot.is-rolling canvas {
+  animation: roll-in 460ms cubic-bezier(0.3, 1.35, 0.4, 1);
+}
+@keyframes roll-in {
+  from {
+    opacity: 0;
+    transform: scale(0.82) rotate(-8deg);
+  }
 }
 .slot.is-filled svg {
   position: absolute;
@@ -739,6 +757,15 @@ fieldset span {
   background: linear-gradient(180deg, #fff 0%, var(--panel) 100%);
   box-shadow: var(--raise);
   transition: transform 360ms cubic-bezier(0.3, 1.3, 0.4, 1), opacity 160ms ease-out;
+}
+/* On its way to the new option the pill stretches a little and settles (app.js replays is-moving on each change). */
+.seg.is-moving::before {
+  animation: stretch 380ms cubic-bezier(0.3, 0.9, 0.4, 1);
+}
+@keyframes stretch {
+  45% {
+    scale: 1.16 0.9;
+  }
 }
 .seg:has(> label:nth-child(3)) {
   --n: 3;
@@ -856,6 +883,7 @@ fieldset input:focus-visible + span {
 /* A key: its name, and under it in small print what you get; the arrow at the end opens the formats.
    Download PNG is the one black key on the page. */
 .key {
+  position: relative;
   display: flex;
   height: 50px;
   border-radius: 999px;
@@ -863,6 +891,39 @@ fieldset input:focus-visible + span {
   box-shadow: var(--raise);
   color: var(--ink);
   transition: transform 120ms ease-out;
+}
+/* Pressed, Download PNG has a band of light run across it, like light across glass (app.js replays is-flash). */
+.key.dark::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(105deg, transparent 38%, rgb(255 255 255 / 0.2) 50%, transparent 62%) 130% 0 / 260% 100% no-repeat;
+  opacity: 0;
+  pointer-events: none;
+}
+.key.dark.is-flash::after {
+  animation: sheen 720ms cubic-bezier(0.35, 0.6, 0.3, 1);
+}
+@keyframes sheen {
+  from {
+    opacity: 1;
+    background-position: 130% 0;
+  }
+  to {
+    opacity: 1;
+    background-position: -30% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .key.dark.is-flash::after,
+  .seg.is-moving::before,
+  .slot.is-rolling canvas {
+    animation: none;
+  }
+  .range:has(input:active) .thumb {
+    transform: none;
+  }
 }
 .key.dark {
   background: var(--btn-dark);
@@ -1054,9 +1115,22 @@ button:disabled {
     transform: translateY(-6px);
   }
 }
-/* While video records, the key fills over the recording, so you can see how long to wait: one loop, or longer with sound. */
+/* While video records, the key fills over the recording and counts the seconds down (app.js), so you can see how long
+   to wait: one loop, or longer with sound. The status under the keys then speaks only to screen readers, unless it has
+   something of its own to say: with no background, that the video records on light. */
 .is-recording .key:has([data-video]) {
   opacity: 1;
+}
+.is-recording [data-video] .res {
+  display: none;
+}
+.is-recording:not([data-background="none"]) .status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 .is-recording [data-video] {
   opacity: 1;

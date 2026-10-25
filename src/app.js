@@ -672,6 +672,7 @@ for (const input of root.querySelectorAll("input[type=radio]")) {
     if (input.name === "background") {
       params.background = input.value;
       params.bg = input.value === "dark" ? BG.dark : BG.light;
+      root.dataset.background = input.value;
     }
     if (input.name === "color") logoColor = input.value;
   };
@@ -691,6 +692,9 @@ for (const input of root.querySelectorAll("input[type=radio]")) {
   });
 }
 applyColor();
+
+// A segment's pill stretches a little on its way to the new option.
+for (const seg of root.querySelectorAll(".controls .seg")) seg.addEventListener("change", () => replay(seg, "is-moving"));
 
 // A dark logo disappears on a dark background: turn it white, and back when the background is light again.
 // Decided by the logo's own luminance, not just for the demo smiley.
@@ -1142,6 +1146,7 @@ function randomize() {
   if (!recording) {
     paintThumb(rollThumb, rolled);
     draw();
+    replay(rollKey, "is-rolling");
   }
   rolls++;
   for (const el of root.querySelectorAll("[data-random], [data-roll]")) el.style.setProperty("--turn", `${rolls * 120}deg`);
@@ -1196,6 +1201,32 @@ new IntersectionObserver(([e]) => dock.classList.toggle("is-stuck", e.intersecti
   threshold: 1,
   rootMargin: "0px 0px -1px 0px",
 }).observe(dock);
+
+// A press on Download PNG runs a band of light across its key.
+pngButton.addEventListener("click", () => replay(pngButton.closest(".key"), "is-flash"));
+
+// While a video records, its own key says so and counts the seconds down, over the fill that shows the progress.
+// The line under the keys stays for what only it can say (recording on light when the background is None);
+// the status still tells screen readers.
+const videoName = root.querySelector("[data-video-name]");
+const RECORD = videoName.textContent;
+let countdown = 0;
+new MutationObserver(() => {
+  const on = root.classList.contains("is-recording");
+  if (on === Boolean(countdown)) return;
+  if (!on) {
+    clearInterval(countdown);
+    countdown = 0;
+    videoName.textContent = RECORD;
+    showCaption();
+    return;
+  }
+  const end = performance.now() + (parseFloat(videoButton.style.getPropertyValue("--rec")) || PERIOD);
+  const tick = () => (videoLength.textContent = `${Math.max(1, Math.ceil((end - performance.now()) / 1000))} s`);
+  videoName.textContent = "Recording…";
+  tick();
+  countdown = setInterval(tick, 200);
+}).observe(root, { attributes: true, attributeFilter: ["class"] });
 
 // --- Formats ---
 
@@ -1666,6 +1697,13 @@ function dataUrlBytes(url) {
 
 function say(text) {
   status.textContent = text;
+}
+
+// Plays a CSS animation again from the start, even if the class is still on from the last time.
+function replay(el, cls) {
+  el.classList.remove(cls);
+  void el.offsetWidth;
+  el.classList.add(cls);
 }
 
 function hexToRgb(hex) {
