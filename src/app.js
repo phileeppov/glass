@@ -426,7 +426,7 @@ function packDrops(list) {
 const tiltGoal = [0, 0];
 const tilt = [0, 0];
 let touches = []; // tap ripples, newest first: { x, y, age: s, amp }
-const LEAN = 140; // ms, how fast the glass follows
+const LEAN = 320; // ms, how fast the glass follows: slow enough to feel heavy, like a slab of glass
 
 function lean(dt) {
   const a = 1 - Math.exp(-dt / LEAN);

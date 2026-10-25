@@ -219,7 +219,7 @@ void main() {
 
   // Outside: the background and a soft shadow slightly below the icon.
   vec2 sn;
-  float sd = max(shape(p + vec2(0.0, 0.05) + u_tilt * 0.04, sn), 0.0); // the shadow slides away from the lean
+  float sd = max(shape(p + vec2(0.0, 0.05) + u_tilt * 0.02, sn), 0.0); // the shadow slides away from the lean
   float shadow = exp(-sd / 0.12) * (u_mode > 0.5 && u_mode < 1.5 ? 0.45 : 0.035) * (1.0 + 0.4 * u_volume * u_depth) * u_shadow;
   vec4 outside;
   if (u_mode > 1.5) {
@@ -274,8 +274,8 @@ void main() {
   vec2 ripple = wv * 0.05 * u_liquid * nearEdge * side + wv * 0.012 * u_sound.x * nearEdge * side;
   // Tap ripples bend whatever they pass over, the glyph too.
   // The light follows the lean; the logo under the glass shifts the other way, more under a thicker slab: parallax.
-  vec2 L = normalize(vec2(-0.55, 0.85) + u_tilt * 0.9);
-  vec2 par = -u_tilt * (0.03 + 0.12 * u_volume * u_depth);
+  vec2 L = normalize(vec2(-0.55, 0.85) + u_tilt * 0.5);
+  vec2 par = -u_tilt * (0.015 + 0.06 * u_volume * u_depth);
   vec2 wake = vec2(0.0);
   float ripGlint = 0.0;
   for (int j = 0; j < 4; j++) {
@@ -372,7 +372,7 @@ void main() {
   if (vol) {
     vec4 v = inside;
     // Fresnel reflection of the room, kept weak: the glass should read as clear, not glossy plastic.
-    vec3 refl = reflect(vec3(u_tilt * 0.4, -1.0), n3); // the room in the rim slides with the lean
+    vec3 refl = reflect(vec3(u_tilt * 0.25, -1.0), n3); // the room in the rim slides with the lean
     float fres = (0.04 + 0.96 * pow(max(1.0 - n3.z, 0.0), 3.0)) * step(tr, 0.999);
     v = mix(v, vec4(studio(refl), 1.0), clamp(fres, 0.0, 1.0) * 0.55);
     // The seam where the rim meets the flat top: a highlight on the lit side, a shadow on the opposite side.
