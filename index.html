@@ -124,31 +124,35 @@
                 <label><input type="radio" name="color" value="white" /><span>White</span></label>
               </div>
             </fieldset>
-            <fieldset class="formats">
-              <legend>Image</legend>
-              <div class="seg">
-                <label><input type="radio" name="image" value="icon" checked /><span>1024</span></label>
-                <label><input type="radio" name="image" value="large" /><span>2048</span></label>
-                <label><input type="radio" name="image" value="avatar" /><span>Avatar</span></label>
-                <label><input type="radio" name="image" value="store" /><span>App Store</span></label>
-              </div>
-            </fieldset>
-            <fieldset>
-              <legend>Video</legend>
-              <div class="seg">
-                <label><input type="radio" name="format" value="square" checked /><span>Square</span></label>
-                <label><input type="radio" name="format" value="wide" /><span>Wide 16:9</span></label>
-              </div>
-            </fieldset>
           </div>
         </details>
 
-        <!-- On a phone this block docks at the bottom of the screen, under the thumb: download is on the first screen. -->
+        <!-- On a phone this block docks at the bottom of the screen, under the thumb: download is on the first screen.
+             Each key says what it makes in small print, and the arrow at its end opens the formats. -->
         <div class="dock">
           <div class="actions">
-            <button type="button" data-png>Download PNG</button>
-            <button type="button" data-video>Record video</button>
+            <div class="key dark">
+              <button type="button" data-png>Download PNG<small data-png-spec>1024 px</small></button>
+              <button type="button" class="opt" popovertarget="png-formats" aria-label="PNG format"><svg viewBox="0 0 10 10" width="10" height="10" aria-hidden="true"><path d="M2 3.8 5 6.8l3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" /></svg></button>
+            </div>
+            <div class="key">
+              <button type="button" data-video>Record video<small data-video-spec><span class="res">1080p · </span>4 s</small></button>
+              <button type="button" class="opt" popovertarget="video-formats" aria-label="Video format"><svg viewBox="0 0 10 10" width="10" height="10" aria-hidden="true"><path d="M2 3.8 5 6.8l3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" /></svg></button>
+            </div>
           </div>
+          <!-- The formats open over their key. Each row draws its framing; with a mouse, Avatar and App Store try it on the glass. -->
+          <fieldset class="menu" id="png-formats" popover>
+            <legend class="sr">Image</legend>
+            <label><input type="radio" name="image" value="icon" checked /><span><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect x="0.75" y="0.75" width="14.5" height="14.5" rx="2.5" fill="none" stroke="currentColor" stroke-opacity="0.35" /><rect x="3.5" y="3.5" width="9" height="9" rx="2.6" fill="currentColor" /></svg>1024 px</span></label>
+            <label><input type="radio" name="image" value="large" /><span><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect x="0.75" y="0.75" width="14.5" height="14.5" rx="2.5" fill="none" stroke="currentColor" stroke-opacity="0.35" /><rect x="3.5" y="3.5" width="9" height="9" rx="2.6" fill="currentColor" /></svg>2048 px</span></label>
+            <label><input type="radio" name="image" value="avatar" /><span><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect x="0.75" y="0.75" width="14.5" height="14.5" rx="2.5" fill="none" stroke="currentColor" stroke-opacity="0.35" /><circle cx="8" cy="8" r="7.25" fill="currentColor" /></svg>Avatar</span></label>
+            <label><input type="radio" name="image" value="store" /><span><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect x="0.75" y="0.75" width="14.5" height="14.5" rx="2.5" fill="currentColor" /></svg>App Store</span></label>
+          </fieldset>
+          <fieldset class="menu" id="video-formats" popover>
+            <legend class="sr">Video</legend>
+            <label><input type="radio" name="format" value="square" checked /><span><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect x="2.25" y="2.25" width="11.5" height="11.5" rx="2" fill="none" stroke="currentColor" stroke-width="1.5" /></svg>Square</span></label>
+            <label><input type="radio" name="format" value="wide" /><span><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect x="0.75" y="4" width="14.5" height="8.2" rx="2" fill="none" stroke="currentColor" stroke-width="1.5" /></svg>Wide 16:9</span></label>
+          </fieldset>
           <button type="button" class="share" data-share hidden>Share it on X →</button>
           <!-- Right after a download, while the interest is there: another look, or a link to this one. -->
           <div class="look after" data-after hidden>
@@ -163,7 +167,7 @@
           </div>
           <p class="status" data-status aria-live="polite"></p>
         </div>
-        <p class="hint caption" data-caption>PNG 1024 px · MP4 1080p, 4 s · Your logo never leaves your browser.</p>
+        <p class="hint caption" data-caption>Your logo never leaves your browser.</p>
       </form>
 
       <!-- The link opens in a new tab, so the uploaded logo and settings aren't lost. -->

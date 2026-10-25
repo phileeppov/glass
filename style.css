@@ -161,7 +161,7 @@ h1 {
   width: 1px;
   height: 1px;
 }
-/* Secondary actions (Randomize, Copy link): a raised white pill with an icon, quieter than the dark buttons. */
+/* Secondary actions (Tilt the glass, and the moves after a download): a white pill, quieter than the keys. */
 .soft {
   display: flex;
   align-items: center;
@@ -185,9 +185,22 @@ h1 {
   grid-template-columns: 1fr 1fr;
   gap: 8px;
 }
-/* After a download: the same two moves again, under Share. */
+/* After a download: another look, or a link to this one, under Share. Text and an icon with no raised key:
+   they're offers, the keys above stay the things to press. */
 .after {
   animation: share-in 320ms cubic-bezier(0.3, 1.3, 0.4, 1);
+}
+.after .soft {
+  padding: 8px 10px;
+  background: none;
+  box-shadow: none;
+  color: color-mix(in srgb, var(--ink) 75%, transparent);
+  transition: background-color 120ms ease-out, color 120ms ease-out;
+}
+.after .soft:hover {
+  filter: none;
+  background: var(--tray);
+  color: var(--ink);
 }
 .after[hidden] {
   display: none;
@@ -831,17 +844,170 @@ fieldset input:focus-visible + span {
   display: grid;
   gap: 8px;
 }
-.actions button + button {
+/* A key: its name, and under it in small print what you get; the arrow at the end opens the formats.
+   Download PNG is the one black key on the page. */
+.key {
+  display: flex;
+  height: 50px;
+  border-radius: 999px;
   background: linear-gradient(180deg, #fff 0%, var(--panel) 100%);
-  color: var(--ink);
   box-shadow: var(--raise);
+  color: var(--ink);
+  transition: transform 120ms ease-out;
 }
-.actions button + button:hover {
-  filter: brightness(0.98);
+.key.dark {
+  background: var(--btn-dark);
+  box-shadow: var(--btn-edge);
+  color: var(--color-off-white);
+}
+.key > button {
+  height: 100%;
+  background: none;
+  box-shadow: none;
+  color: inherit;
+  transition: background-color 120ms ease-out;
+}
+.key > button:hover {
+  filter: none;
+  background: color-mix(in srgb, var(--color-black) 3%, transparent);
+}
+.key.dark > button:hover {
+  background: rgb(255 255 255 / 0.07);
+}
+.key > button:active {
+  transform: none;
+}
+.key:has(> button:active) {
+  transform: scale(0.985);
+}
+.key > button:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+.key > button:first-child {
+  flex: 1;
+  width: auto;
+  display: grid;
+  place-content: center;
+  padding: 0 8px 0 16px;
+  border-radius: 999px 0 0 999px;
+  line-height: 1.25;
+}
+.key small {
+  font-size: 11px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.55;
+  white-space: nowrap;
+}
+/* The arrow: its own part of the key, after a hairline. It turns over while its menu is open. */
+.key .opt {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  padding: 0 4px 0 0;
+  border-radius: 0 999px 999px 0;
+  box-shadow: inset 0.5px 0 0 color-mix(in srgb, var(--color-black) 12%, transparent);
+}
+.key.dark .opt {
+  box-shadow: inset 0.5px 0 0 rgb(255 255 255 / 0.16);
+}
+.opt svg {
+  opacity: 0.7;
+  transition: transform 220ms cubic-bezier(0.3, 1.3, 0.4, 1);
+}
+.opt[aria-expanded="true"] svg {
+  transform: rotate(180deg);
 }
 button:disabled {
   opacity: 0.4;
   cursor: default;
+}
+/* A key dims as a whole, not just its label. */
+.key:has(> button:disabled) {
+  opacity: 0.4;
+}
+.key > button:disabled {
+  opacity: 1;
+}
+.is-recording .opt {
+  pointer-events: none;
+}
+/* The formats menu opens over its key and as wide as it (app.js places it). A row is a format with a drawing
+   of its framing; the chosen one has a check. Hovering a row lays the tray under it. */
+.menu {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  padding: 4px;
+  border: 0;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #fff 0%, var(--panel) 100%);
+  box-shadow: inset 0 1px 0 #fff, 0 0 0 0.5px color-mix(in srgb, var(--color-black) 10%, transparent),
+    0 2px 4px color-mix(in srgb, var(--color-black) 6%, transparent),
+    0 16px 32px -12px color-mix(in srgb, var(--color-black) 24%, transparent);
+  color: var(--ink);
+  font-size: var(--text-meta);
+  letter-spacing: -0.04em;
+}
+/* A fieldset is display: flex in this sheet, which would keep a closed menu on screen. */
+.menu:not(:popover-open),
+.menu[hidden] {
+  display: none;
+}
+.menu:popover-open {
+  display: grid;
+  gap: 2px;
+  animation: menu-in 220ms cubic-bezier(0.3, 1.2, 0.4, 1);
+}
+@keyframes menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+}
+.menu label {
+  display: block;
+}
+.menu span {
+  display: grid;
+  grid-template-columns: 16px 1fr 10px;
+  align-items: center;
+  gap: 10px;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 14px;
+  text-align: left;
+  white-space: nowrap;
+  opacity: 1;
+  color: color-mix(in srgb, var(--ink) 72%, transparent);
+  transition: background-color 120ms ease-out;
+}
+.menu label:hover span {
+  opacity: 1;
+  background: var(--tray);
+  color: var(--ink);
+}
+.menu input:checked + span {
+  color: var(--ink);
+}
+.menu input:checked + span::after {
+  content: "";
+  width: 9px;
+  height: 5px;
+  border-left: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: translateY(-2px) rotate(-45deg);
+}
+.menu input:focus-visible + span {
+  outline: 2px solid var(--ink);
+  outline-offset: -2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .menu:popover-open {
+    animation: none;
+  }
 }
 /* Share is a small link under the buttons, shown after the first save. */
 .share {
@@ -879,7 +1045,10 @@ button:disabled {
     transform: translateY(-6px);
   }
 }
-/* While video records, the button fills over the recording, so you can see how long to wait: one loop, or longer with sound. */
+/* While video records, the key fills over the recording, so you can see how long to wait: one loop, or longer with sound. */
+.is-recording .key:has([data-video]) {
+  opacity: 1;
+}
 .is-recording [data-video] {
   opacity: 1;
   background:
@@ -942,9 +1111,8 @@ button:disabled {
 .presets .seg::before {
   border-radius: 19px;
 }
-/* Five presets and four image formats share a tray: the labels go edge to edge and never wrap. */
-.presets span,
-.formats span {
+/* Six keys share the row under the glass: the labels go edge to edge and never wrap. */
+.presets span {
   padding-inline: 0;
   white-space: nowrap;
 }
@@ -1074,6 +1242,16 @@ button:disabled {
   .dock .actions {
     grid-template-columns: 1fr 1fr;
     margin-top: 0;
+  }
+  /* Half a screen per key: a narrower arrow, and the small print keeps only what changes, the length. */
+  .key > button:first-child {
+    padding: 0 6px 0 12px;
+  }
+  .key .opt {
+    width: 34px;
+  }
+  .key .res {
+    display: none;
   }
   .dock .share.is-save {
     margin-top: 0;

@@ -799,13 +799,15 @@ function showBars() {
   if (on) sound.bands.forEach((b, i) => (bars.children[i].style.transform = `scaleY(${(0.15 + 0.85 * b).toFixed(3)})`));
 }
 
-// The line under the buttons says what you'll get: which PNG, and a video that's the loop,
-// one round of the tune, or a stretch of your own sound.
+// Each key says in small print what you'll get: which PNG, and a video that's the loop, one round of the tune,
+// or a stretch of your own sound. The line under the keys keeps the promise about your logo.
+const pngSpec = root.querySelector("[data-png-spec]");
+const videoLength = root.querySelector("[data-video-spec]").lastChild; // the text after the resolution
 function showCaption() {
   const mode = root.querySelector("input[name=sound]:checked")?.value ?? "off";
-  const video = mode === "off" ? "MP4 1080p, 4 s" : mode === "demo" ? "MP4 1080p, 9.6 s with sound" : "MP4 1080p, 12 s with sound";
-  const own = mode === "mic" || mode === "track" ? "Your logo and sound never leave your browser." : "Your logo never leaves your browser.";
-  caption.textContent = `${imageFormat().note} · ${video} · ${own}`;
+  pngSpec.textContent = imageFormat().spec;
+  videoLength.textContent = mode === "off" ? "4 s" : mode === "demo" ? "9.6 s with sound" : "12 s with sound";
+  caption.textContent = mode === "mic" || mode === "track" ? "Your logo and sound never leave your browser." : "Your logo never leaves your browser.";
 }
 for (const input of root.querySelectorAll("input[name=image]")) {
   input.addEventListener("change", () => {
@@ -1181,6 +1183,48 @@ if (matchMedia("(hover: hover) and (pointer: fine)").matches) {
   }
 }
 
+// --- Formats ---
+
+// The arrow at the end of each key opens its formats over the key, as wide as the key. A tap on a format picks it and
+// closes the menu; arrow keys move between formats and leave it open. The menu is pinned in place, so scrolling closes it.
+const menus = [...root.querySelectorAll(".menu[popover]")];
+const popovers = "popover" in HTMLElement.prototype;
+for (const menu of menus) {
+  const opener = root.querySelector(`[popovertarget="${menu.id}"]`);
+  // Without the popover API (Safari before 17) the formats simply show and hide under the keys.
+  if (!popovers) {
+    menu.hidden = true;
+    opener.addEventListener("click", () => (menu.hidden = !menu.hidden));
+    continue;
+  }
+  let pointed = false;
+  menu.addEventListener("beforetoggle", (e) => {
+    if (e.newState !== "open") return;
+    const r = opener.closest(".key").getBoundingClientRect();
+    menu.style.left = `${r.left}px`;
+    menu.style.width = `${r.width}px`;
+    menu.style.bottom = `${innerHeight - r.top + 8}px`;
+  });
+  menu.addEventListener("toggle", (e) => {
+    if (e.newState === "open") return void menu.querySelector("input:checked")?.focus({ preventScroll: true });
+    trying = null; // a framing tried on hover goes when the menu does
+    kick();
+  });
+  menu.addEventListener("pointerdown", () => (pointed = true));
+  menu.addEventListener("click", (e) => {
+    if (pointed && e.target.closest("label")) queueMicrotask(() => menu.hidePopover());
+    pointed = false;
+  });
+  menu.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") menu.hidePopover();
+  });
+}
+function closeMenus() {
+  if (popovers) for (const menu of menus) if (menu.matches(":popover-open")) menu.hidePopover();
+}
+addEventListener("resize", closeMenus);
+addEventListener("scroll", closeMenus, { passive: true });
+
 // --- Link to a look ---
 
 // The settings travel in the link's hash, under short keys with three decimals. The logo never does:
@@ -1312,10 +1356,10 @@ function frameInto(out, p, phase, opaque = false) {
 // What Download PNG makes. Avatar: the glass as a circle filling the frame, for round profile pictures.
 // App Store: the shape fills the square with no shadow and no transparency; the store rounds the corners itself.
 const IMAGES = {
-  icon: { px: EXPORT_PX, name: "glass-icon.png", note: "PNG 1024 px" },
-  large: { px: 2048, name: "glass-icon-2048.png", note: "PNG 2048 px", told: "image:2048" },
-  avatar: { px: 1024, name: "glass-avatar.png", note: "Avatar PNG 1024 px", fill: true, shape: "circle", told: "image:avatar" },
-  store: { px: 1024, name: "glass-app-store.png", note: "App Store PNG 1024 px", fill: true, opaque: true, told: "image:store" },
+  icon: { px: EXPORT_PX, name: "glass-icon.png", spec: "1024 px" },
+  large: { px: 2048, name: "glass-icon-2048.png", spec: "2048 px", told: "image:2048" },
+  avatar: { px: 1024, name: "glass-avatar.png", spec: "Avatar", fill: true, shape: "circle", told: "image:avatar" },
+  store: { px: 1024, name: "glass-app-store.png", spec: "App Store", fill: true, opaque: true, told: "image:store" },
 };
 const imageFormat = () => IMAGES[root.querySelector("input[name=image]:checked")?.value] ?? IMAGES.icon;
 
