@@ -66,6 +66,7 @@ const applyVolume = () => {
 let logoColor = "original";
 let logoLuma = 0; // average logo luminance 0..1; a dark logo on a dark background is turned white, a white one on light black
 let fill = false; // a photo or an icon on its own plate: it covers the glass edge to edge instead of sitting on it
+let stroke = "bold"; // how thick the logo's thickest part is: thin, mid, bold, or fill for a photo (see buildLogo)
 let autoColor = false; // the color was switched by the code, not by the user
 let recording = false;
 const sound = new Sound();
@@ -80,18 +81,27 @@ try {
   throw new Error("WebGL is not available");
 }
 
+// --- Telling ---
+
+// What people do here, by name, for whoever listens. On phileeppov.com a separate script counts these anonymously:
+// the name only, never a logo, a file name or a value. Here nobody listens, and nothing leaves the page.
+function tell(name) {
+  root.dispatchEvent(new CustomEvent("glass:tell", { detail: name }));
+}
+
 // --- Logo ---
 
-async function loadFile(file) {
+// via: how the user brought it, "file", "drop" or "paste"; the demo ☺ and typed text come without one.
+async function loadFile(file, via) {
   if (recording) return; // the logo doesn't change mid-recording
   if (isAudio(file)) return void setSound("track", file); // a song dropped or pasted on the page plays as the track
   textInput.value = "";
   textTurn++; // a word still loading must not replace the file
   if (autoColor) setColor("original");
   if (file.type === "image/svg+xml" || file.name.toLowerCase().endsWith(".svg")) {
-    await loadSvg(await file.text());
+    await loadSvg(await file.text(), via);
   } else if (file.type.startsWith("image/")) {
-    await loadUrl(URL.createObjectURL(file));
+    await loadUrl(URL.createObjectURL(file), via);
   } else {
     say("That file isn't an image. Try an SVG or PNG.");
   }
@@ -102,7 +112,7 @@ function isAudio(file) {
 }
 
 // Browsers render an SVG without width/height at a tiny size, so set the size from viewBox.
-async function loadSvg(text) {
+async function loadSvg(text, via) {
   const doc = new DOMParser().parseFromString(text, "image/svg+xml");
   const svg = doc.documentElement;
   if (svg.nodeName.toLowerCase() !== "svg") return say("Couldn't read that SVG.");
@@ -115,7 +125,7 @@ async function loadSvg(text) {
   svg.setAttribute("width", String(w * k));
   svg.setAttribute("height", String(h * k));
   const blob = new Blob([new XMLSerializer().serializeToString(svg)], { type: "image/svg+xml" });
-  await loadUrl(URL.createObjectURL(blob));
+  await loadUrl(URL.createObjectURL(blob), via);
 }
 
 // Layers with transparency from Figma (opacity, fill-opacity, stroke-opacity) are set to 100%:
@@ -132,7 +142,7 @@ function solidify(svg) {
   }
 }
 
-async function loadUrl(url) {
+async function loadUrl(url, via) {
   const img = new Image();
   img.src = url;
   try {
@@ -151,6 +161,11 @@ async function loadUrl(url) {
     URL.revokeObjectURL(url);
   }
   say("");
+  if (via) {
+    tell("upload");
+    tell(`from:${via}`);
+    tell(`logo:${stroke}`);
+  }
   fitColorToBackground();
   applyColor();
   renderThumbs();
@@ -275,6 +290,12 @@ function buildLogo(img, crop) {
   for (let i = 3; i < shape.length; i += 4) if (shape[i] > maxAlpha) maxAlpha = shape[i];
   if (maxAlpha > 0 && maxAlpha < 250) for (let i = 3; i < shape.length; i += 4) shape[i] = (shape[i] * 255) / maxAlpha;
   const sdf = buildSdf(shape, LAYER, SDF_SPREAD);
+  // A typical half-width of the strokes, in texels: across a stroke the distance inside runs evenly from 0 to the half-width,
+  // so twice the average distance inside is that half-width. The deepest point would overrate thin logos: joins are wider.
+  let inside = 0, sum = 0;
+  for (let i = 0; i < sdf.length; i++) if (sdf[i] > 128) (inside++, (sum += sdf[i] - 128));
+  const half = inside ? ((2 * sum) / inside / 127) * SDF_SPREAD : 0;
+  stroke = fill ? "fill" : half < 6 ? "thin" : half < 16 ? "mid" : "bold";
 
   const color = document.createElement("canvas");
   color.width = color.height = LAYER;
@@ -618,7 +639,7 @@ function setColor(c, auto = false) {
 
 fileInput.addEventListener("change", () => {
   const file = fileInput.files?.[0];
-  if (file) loadFile(file);
+  if (file) loadFile(file, "file");
   fileInput.value = "";
 });
 
@@ -628,6 +649,7 @@ textInput.addEventListener("input", () => {
   clearTimeout(textTimer);
   textTimer = setTimeout(() => loadText(textInput.value.trim()), 180);
   tried("text");
+  tell("text");
 });
 for (const sample of root.querySelectorAll("[data-sample]")) {
   sample.addEventListener("click", () => {
@@ -635,6 +657,7 @@ for (const sample of root.querySelectorAll("[data-sample]")) {
     textInput.value = sample.dataset.sample;
     loadText(sample.dataset.sample);
     tried("text");
+    tell("text");
   });
 }
 
@@ -655,7 +678,7 @@ document.addEventListener("drop", (e) => {
   dragDepth = 0;
   root.classList.remove("is-over");
   const file = e.dataTransfer?.files[0];
-  if (file) loadFile(file);
+  if (file) loadFile(file, "drop");
 });
 
 // --- Sound ---
@@ -706,6 +729,7 @@ async function setSound(mode, file) {
     else if (mode === "track") await sound.track(file);
     else sound.off();
     if (sound.wanted === mode) say(mode === "track" ? `♪ ${sound.name}` : "");
+    if (sound.wanted === mode && mode !== "off") tell(`sound:${mode}`); // the mode only, never the track's name
   } catch (e) {
     if (sound.wanted !== mode) return;
     say(soundError(mode, e));
@@ -809,6 +833,7 @@ tiltButton.addEventListener("click", async () => {
     addEventListener("deviceorientation", onOrient);
     tiltButton.hidden = true;
     tried("tilt");
+    tell("tilt");
   } catch {
     say("Motion access is off, so the glass won't tilt.");
   }
@@ -826,6 +851,7 @@ canvas.addEventListener("pointerdown", (e) => {
   const y = (-((e.clientY - r.top) / r.height - 0.5) * 2) / ICON_SCALE;
   if (Math.hypot(x, y) > 1.3) return; // the shadow and the margin, not the glass
   pressed = true;
+  tell("tap");
   if (reducedMotion) return;
   touches = [{ x, y, age: 0, amp: 1.6 }, ...touches].slice(0, 4);
   kick();
@@ -953,6 +979,7 @@ for (const input of root.querySelectorAll("input[name=preset]")) {
   input.addEventListener("change", () => {
     if (!input.checked) return;
     applyPreset(input.value);
+    tell(`preset:${input.value}`);
   });
 }
 
@@ -985,6 +1012,7 @@ let rolls = 0;
 function randomize() {
   applyLook(randomLook());
   tried("random");
+  tell("random");
   for (const input of root.querySelectorAll("input[name=preset]")) input.checked = false;
   rolls++;
   for (const button of root.querySelectorAll("[data-random]")) button.style.setProperty("--turn", `${rolls * 120}deg`);
@@ -1057,6 +1085,7 @@ function openLook() {
 
 async function copyLink() {
   tried("link");
+  tell("link:copy");
   const url = `${location.origin}${location.pathname}#${lookHash()}`;
   history.replaceState(null, "", url);
   try {
@@ -1106,7 +1135,7 @@ document.addEventListener("paste", (e) => {
   // An image or SVG code is the logo, not text for the field, even if the field has focus.
   if (file) {
     e.preventDefault();
-    return void loadFile(file);
+    return void loadFile(file, "paste");
   }
   const text = data.getData("text/plain").trim();
   if (recording) return;
@@ -1115,7 +1144,7 @@ document.addEventListener("paste", (e) => {
     textInput.value = "";
     textTurn++;
     if (autoColor) setColor("original");
-    loadSvg(text);
+    loadSvg(text, "paste");
   }
 });
 
@@ -1137,9 +1166,9 @@ function frameInto(out, p, phase, opaque = false) {
 // App Store: the shape fills the square with no shadow and no transparency; Apple rounds the corners itself.
 const IMAGES = {
   icon: { px: EXPORT_PX, name: "glass-icon.png", note: "PNG 1024 px" },
-  large: { px: 2048, name: "glass-icon-2048.png", note: "PNG 2048 px" },
-  avatar: { px: 1024, name: "glass-avatar.png", note: "Avatar PNG 1024 px", fill: true, shape: "circle" },
-  store: { px: 1024, name: "glass-app-store.png", note: "App Store PNG 1024 px", fill: true, opaque: true },
+  large: { px: 2048, name: "glass-icon-2048.png", note: "PNG 2048 px", told: "image:2048" },
+  avatar: { px: 1024, name: "glass-avatar.png", note: "Avatar PNG 1024 px", fill: true, shape: "circle", told: "image:avatar" },
+  store: { px: 1024, name: "glass-app-store.png", note: "App Store PNG 1024 px", fill: true, opaque: true, told: "image:store" },
 };
 const imageFormat = () => IMAGES[root.querySelector("input[name=image]:checked")?.value] ?? IMAGES.icon;
 
@@ -1157,7 +1186,11 @@ pngButton.addEventListener("click", () => {
   frameInto(out, withTurn(framed, phase), phase, format.opaque);
   const done = async (blob) => {
     if (blob && format.opaque) blob = await withoutAlpha(blob, out);
-    if (blob) save(blob, format.name);
+    if (blob) {
+      save(blob, format.name);
+      tell("png");
+      if (format.told) tell(format.told);
+    }
     draw();
   };
   // iOS only reliably opens the Share sheet in the same tick as the tap, and toBlob responds later,
@@ -1297,6 +1330,7 @@ videoButton.addEventListener("click", async () => {
     const mp4 = type.startsWith("video/mp4");
     if (chunks.length) {
       save(new Blob(chunks, { type }), `glass-icon${wide ? "-wide" : ""}.${mp4 ? "mp4" : "webm"}`);
+      tell(wide ? "video-wide" : "video");
       // X takes MP4 and MOV video; browsers that can't record MP4 (Firefox) write WebM.
       if (!mp4) message = "Saved as WebM. For X, record in Chrome or Safari.";
     } else {
@@ -1359,6 +1393,8 @@ function offerSave() {
 
 shareButton.addEventListener("click", async () => {
   if (!lastExport) return;
+  // On iPhone this button means save, not share, so it isn't told as share.
+  if (!ios) tell("share");
   const file = new File([lastExport.blob], lastExport.name, { type: lastExport.blob.type });
   if ((touch || ios) && navigator.canShare?.({ files: [file] })) {
     try {
