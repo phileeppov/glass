@@ -209,9 +209,9 @@ async function loadText(text) {
   kick();
 }
 
-// A logo on a plain background, a JPG or a PNG exported on white, comes back with that background keyed out,
-// so the glass sees the mark and not a white card. The background is the border color, when the border is one color.
-// Other opaque pictures, photos for example, come back as they are and fill the glass (see buildLogo).
+// A logo exported on white, a JPG or a PNG without transparency, comes back with the white keyed out,
+// so the glass sees the mark and not a white card. Only a plain white border counts: a border in another colour is
+// an icon's own plate, and a photo has no plain border at all. Those come back as they are (see buildLogo).
 function unplate(img) {
   const iw = img.naturalWidth || img.width;
   const ih = img.naturalHeight || img.height;
@@ -230,16 +230,55 @@ function unplate(img) {
   for (let x = 0; x < w; x++) border.push(x, (h - 1) * w + x);
   for (let y = 1; y < h - 1; y++) border.push(y * w, y * w + w - 1);
   const bg = [0, 1, 2].map((ch) => border.reduce((sum, i) => sum + px[i * 4 + ch], 0) / border.length / 255);
-  const dist = (i) => Math.hypot(px[i] / 255 - bg[0], px[i + 1] / 255 - bg[1], px[i + 2] / 255 - bg[2]);
-  if (border.filter((i) => dist(i * 4) < 0.08).length < border.length * 0.92) return img; // a busy border: a photo
-  for (let i = 0; i < px.length; i += 4) {
-    const t = Math.min(1, Math.max(0, (dist(i) - 0.04) / 0.1));
-    const a = t * t * (3 - 2 * t);
-    // The edge pixels were blended with the background; take the background back out of their color.
-    for (let ch = 0; ch < 3; ch++) px[i + ch] = a ? Math.min(255, Math.max(0, (bg[ch] + (px[i + ch] / 255 - bg[ch]) / a) * 255)) : 0;
-    px[i + 3] = a * 255;
+  const n = w * h;
+  const d = new Float32Array(n); // how far each pixel is from the background colour
+  for (let p = 0; p < n; p++) d[p] = Math.hypot(px[p * 4] / 255 - bg[0], px[p * 4 + 1] / 255 - bg[1], px[p * 4 + 2] / 255 - bg[2]);
+  // A logo cropped tight touches the border with a letter or two, so most of the border, not all of it, has to be plain.
+  if (border.filter((p) => d[p] < 0.08).length < border.length * 0.8) return img; // a busy border: a photo
+  if (Math.min(...bg) < 0.86) return img; // plain, but not white: an icon's own plate
+  // Unmixing. An edge pixel is the logo's colour next to it, blended with white: if a neighbour within 2 px is further
+  // from white and this pixel lies on the line from white to it, it takes that colour, with the opacity of how far along
+  // the line it is. Anything else is a colour of its own and stays solid, so two colours that touch keep their seam.
+  const out = new Uint8ClampedArray(px.length);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const p = y * w + x;
+      const o = p * 4;
+      if (d[p] <= 0.02) continue; // background: transparent
+      let far = p;
+      for (let yy = Math.max(0, y - 2); yy <= Math.min(h - 1, y + 2); yy++) {
+        for (let xx = Math.max(0, x - 2); xx <= Math.min(w - 1, x + 2); xx++) if (d[yy * w + xx] > d[far]) far = yy * w + xx;
+      }
+      if (d[far] > d[p] * 1.08) {
+        const q = far * 4;
+        let dot = 0;
+        let len = 0;
+        for (let ch = 0; ch < 3; ch++) {
+          const fc = px[q + ch] / 255 - bg[ch];
+          dot += (px[o + ch] / 255 - bg[ch]) * fc;
+          len += fc * fc;
+        }
+        const t = Math.min(1, Math.max(0, dot / len));
+        let miss = 0;
+        for (let ch = 0; ch < 3; ch++) miss += (px[o + ch] / 255 - bg[ch] - t * (px[q + ch] / 255 - bg[ch])) ** 2;
+        if (miss < 0.0064) {
+          out.set(px.subarray(q, q + 3), o);
+          out[o + 3] = t * 255;
+          continue;
+        }
+      }
+      if (d[p] >= 0.3) {
+        out.set(px.subarray(o, o + 3), o);
+        out[o + 3] = 255;
+      } else {
+        // Faint and alone: a hairline or noise. Its own colour with the white taken back out.
+        const t = (d[p] - 0.02) / 0.28;
+        for (let ch = 0; ch < 3; ch++) out[o + ch] = (bg[ch] + (px[o + ch] / 255 - bg[ch]) / t) * 255;
+        out[o + 3] = t * 255;
+      }
+    }
   }
-  ctx.putImageData(data, 0, 0);
+  ctx.putImageData(new ImageData(out, w, h), 0, 0);
   return c;
 }
 
@@ -273,7 +312,9 @@ function trim(img) {
 // Two textures: a distance field for the shape, and color extended past the edge so the blurred rim doesn't darken.
 // A solid picture fills the glass: its middle square is taken, and the size never goes under edge to edge (see target).
 function buildLogo(img, crop) {
-  fill = crop.solid > 0.9;
+  // Solid and close to square: a photo or an icon on its own plate. A wide or tall one keeps its shape and sits in the glass.
+  const aspect = crop.w / crop.h;
+  fill = crop.solid > 0.95 && aspect > 0.75 && aspect < 1.33;
   if (fill) {
     const side = Math.min(crop.w, crop.h);
     crop = { x: crop.x + (crop.w - side) / 2, y: crop.y + (crop.h - side) / 2, w: side, h: side };
@@ -799,6 +840,11 @@ const tiltButton = root.querySelector("[data-tilt]");
 if (!reducedMotion) {
   stageWrap.addEventListener("pointermove", (e) => {
     if (e.pointerType !== "mouse") return;
+    // Over the presets the glass stands straight, so a look being tried on is seen as it is.
+    if (e.target.closest(".looks")) {
+      tiltGoal[0] = tiltGoal[1] = 0;
+      return void kick();
+    }
     const r = canvas.getBoundingClientRect();
     tiltGoal[0] = clamp1(((e.clientX - r.left) / r.width - 0.5) * 2);
     tiltGoal[1] = clamp1(-((e.clientY - r.top) / r.height - 0.5) * 2);
@@ -905,7 +951,9 @@ function presetLook(name, still = false) {
   const background = preset.radios.background;
   const dark = background === "dark";
   const white = !fill && dark && (logoColor === "black" || logoColor === "white" || (logoColor === "original" && logoLuma < 0.3));
-  const black = !dark && (logoColor === "black" || (!fill && logoColor === "original" && logoLuma > 0.85));
+  // On light a pale logo turns black, whether it shows its own colour or was turned white on a dark page (see fitColorToBackground).
+  const pale = !fill && logoLuma > 0.85 && (logoColor === "original" || (logoColor === "white" && autoColor));
+  const black = !dark && (logoColor === "black" || pale);
   const tint = white ? [1, 1, 1] : black ? hexToRgb(tokens.getPropertyValue("--color-black")) : logoColor === "white" && !autoColor ? [1, 1, 1] : null;
   const { angle = angleDeg, thickness: slab = thickness, motion = params.motion, ...ranges } = preset.ranges;
   const keepTint = lastTint;
@@ -1096,7 +1144,7 @@ async function copyLink() {
   }
 }
 
-for (const button of root.querySelectorAll("[data-link]")) button.addEventListener("click", copyLink);
+for (const button of root.querySelectorAll("[data-copy-link]")) button.addEventListener("click", copyLink);
 addEventListener("hashchange", openLook);
 
 // Advanced remembers whether it's open, per visitor, in their own browser.
@@ -1184,8 +1232,9 @@ pngButton.addEventListener("click", () => {
   });
   const framed = format.fill ? { ...live(look), frame: 1, shadow: 0 } : live(look);
   frameInto(out, withTurn(framed, phase), phase, format.opaque);
-  const done = async (blob) => {
-    if (blob && format.opaque) blob = await withoutAlpha(blob, out);
+  // rgb: the PNG is known to have no alpha already, so there is nothing to wait for before saving.
+  const done = async (blob, rgb = false) => {
+    if (blob && format.opaque && !rgb) blob = await withoutAlpha(blob, out);
     if (blob) {
       save(blob, format.name);
       tell("png");
@@ -1194,9 +1243,11 @@ pngButton.addEventListener("click", () => {
     draw();
   };
   // iOS only reliably opens the Share sheet in the same tick as the tap, and toBlob responds later,
-  // so there the PNG is built synchronously.
-  if (ios) done(dataUrlToBlob(out.toDataURL("image/png")));
-  else out.toBlob(done, "image/png");
+  // so there the PNG is built synchronously. Byte 25 of a PNG is its colour type: 2 is RGB, no alpha.
+  if (ios) {
+    const bytes = dataUrlBytes(out.toDataURL("image/png"));
+    done(new Blob([bytes], { type: "image/png" }), bytes[25] === 2);
+  } else out.toBlob(done, "image/png");
 });
 
 // App Store Connect refuses an icon with an alpha channel. Browsers write RGB from an opaque canvas, mostly;
@@ -1448,12 +1499,12 @@ function download(blob, name) {
   shareButton.hidden = false;
 }
 
-// Synchronous toBlob replacement for iOS (see "Download PNG").
-function dataUrlToBlob(url) {
+// A data URL's bytes, synchronously: the iOS stand-in for toBlob (see "Download PNG").
+function dataUrlBytes(url) {
   const bytes = atob(url.slice(url.indexOf(",") + 1));
   const out = new Uint8Array(bytes.length);
   for (let i = 0; i < bytes.length; i++) out[i] = bytes.charCodeAt(i);
-  return new Blob([out], { type: "image/png" });
+  return out;
 }
 
 function say(text) {

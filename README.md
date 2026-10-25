@@ -4,7 +4,7 @@ Drop a logo, get it back as a glass app icon. Live at [phileeppov.com/glass](htt
 
 ![The smiley logo turns into a glass app icon, moves through three presets and settles back flat](media/glass.gif)
 
-Upload an SVG, PNG or JPG, drop it on the page, paste one from Figma, or type a letter, a word or an emoji. A logo on a plain background loses it, and a photo fills the glass.
+Upload an SVG, PNG or JPG, drop it on the page, paste one from Figma, or type a letter, a word or an emoji. A logo on white loses the white background, and a square photo or app icon fills the glass.
 
 Out comes a 1080p video, square or 16:9, or a PNG: 1024 or 2048 px, an avatar for round profile pictures, or a square App Store icon. Everything runs in the browser, so the logo never leaves it.
 

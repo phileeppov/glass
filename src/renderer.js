@@ -251,7 +251,8 @@ void main() {
   // Cut glass: two flat facets instead of the rounded profile. Each shifts the logo by its own constant amount,
   // so the rim shows two clean copies of the edge, and the step between them is a sharp line.
   float facetAA = 1.2 * px / max(u_edge, 1e-3);
-  float facets = 0.5 * smoothstep(-facetAA, facetAA, e - 0.02) + 0.5 * smoothstep(-facetAA, facetAA, e - 0.5);
+  // The first step only rises past the start of the rim, so the flat middle (e = 0) never shifts, at any canvas size.
+  float facets = 0.5 * smoothstep(0.02, 0.02 + 2.0 * facetAA, e) + 0.5 * smoothstep(0.5 - facetAA, 0.5 + facetAA, e);
   rimPull = mix(rimPull, facets, u_facet);
   // Liquid: the falloff reaches deep inside and becomes gentle, so the image doesn't fold
   // into a separate arc but stretches continuously to the edge: the glyph flows into the rim as a bridge.
@@ -292,7 +293,7 @@ void main() {
   float r = 1.0 - tr;
   // Cut glass turns the slab's rounded rim into the same two facets.
   float rAA = 1.2 * px / rimW;
-  r = mix(r, 0.5 * smoothstep(-rAA, rAA, r - 0.02) + 0.35 * smoothstep(-rAA, rAA, r - 0.5), u_facet);
+  r = mix(r, 0.5 * smoothstep(0.02, 0.02 + 2.0 * rAA, r) + 0.35 * smoothstep(0.5 - rAA, 0.5 + rAA, r), u_facet);
   float slope = r / max(sqrt(1.0 - r * r), 0.08);
   vec3 n3 = normalize(vec3(nrm * slope, 1.0));
   float h = 0.1 + 0.4 * u_volume;
