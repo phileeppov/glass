@@ -129,6 +129,8 @@ h1 {
   border-radius: 24px;
   /* The checkerboard shows only in no-background mode, to show the PNG is transparent. */
   background: repeating-conic-gradient(var(--color-off-white) 0 25%, color-mix(in srgb, var(--color-black) 6%, var(--color-off-white)) 0 50%) 0 0 / 24px 24px;
+  /* The whole glass leans up to 8° toward the cursor or with the phone (app.js sets the lean, -1 to 1). */
+  transform: perspective(1100px) rotateY(calc(var(--lean-x, 0) * 8deg)) rotateX(calc(var(--lean-y, 0) * 8deg));
 }
 .unsupported {
   display: none;

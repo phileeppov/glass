@@ -497,7 +497,9 @@ function packDrops(list) {
 // --- Lean and touch ---
 
 // The glass leans toward the cursor over the stage, or with the phone; a tap drops a ripple where it lands and rings the glass.
-// Preview only: PNG and video come out upright and untouched. Reduced motion turns lean and ripples off.
+// The lean moves the light inside the glass (the shader) and turns the whole glass a few degrees in perspective (the CSS
+// reads --lean-x and --lean-y off the canvas). Preview only: PNG and video come out upright and untouched.
+// Reduced motion turns lean and ripples off.
 const tiltGoal = [0, 0];
 const tilt = [0, 0];
 let touches = []; // tap ripples, newest first: { x, y, age: s, amp }
@@ -513,6 +515,8 @@ function lean(dt) {
       moving = true;
     } else tilt[i] = tiltGoal[i];
   }
+  canvas.style.setProperty("--lean-x", tilt[0].toFixed(4));
+  canvas.style.setProperty("--lean-y", tilt[1].toFixed(4));
   for (const t of touches) t.age += dt / 1000;
   touches = touches.filter((t) => t.age < 1);
   return moving || touches.length > 0;
