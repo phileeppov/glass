@@ -28,9 +28,8 @@
  * @property {Background} background
  * @property {[number, number, number]} bg background color for light/dark, 0..1
  * @property {[number, number, number, number]} [sound] loudness, bass, beat, unused; all 0 or absent when sound is off
- * @property {[number, number, number, number]} [ring] beat ripples: age (s) and strength of the newest, then of the one before
  * @property {Float32Array} [bands] 8 frequency bands, 0..1, low to high
- * @property {Float32Array} [drops] 4 small ripples, x, y, age (s), strength each
+ * @property {Float32Array} [drops] 4 tap ripples, x, y, age (s), strength each
  * @property {[number, number]} [tilt] where the glass leans, -1..1 per axis; absent in exports
  * @property {number} [frame] share of the frame the icon takes, ICON_SCALE by default, 1 to fill it
  * @property {number} [shadow] 1: shadow under the icon (default), 0: none
@@ -82,9 +81,8 @@ uniform float u_depth;      // 0: flat glass, 1: with volume; continuous so the 
 uniform vec3 u_bg;
 uniform float u_mode;       // 0 light, 1 dark, 2 transparent
 uniform vec4 u_sound;       // x loudness, y bass; all 0 when sound is off, and then nothing below changes
-uniform vec4 u_ring;        // beat ripples: x age (s) and y strength of the newest, zw of the one before
 uniform float u_bands[8];   // sound by frequency, low to high, 0..1; laid along the fringe from red to violet
-uniform vec4 u_drops[4];    // small ripples: xy center, z age (s), w strength
+uniform vec4 u_drops[4];    // tap ripples: xy center, z age (s), w strength
 uniform vec2 u_tilt;        // where the glass leans, toward the cursor or with the phone: -1..1 per axis, 0 when still
 uniform float u_zoom;       // 1: the icon takes ${Math.round(ICON_SCALE * 100)}% of the frame; less fills more (avatar and App Store fill all of it)
 uniform float u_shadow;     // 1: soft shadow under the icon, 0: none (avatar, App Store)
@@ -184,14 +182,7 @@ vec2 waves(vec2 p, float T) {
   return vec2(a, b) * 0.5;
 }
 
-// A ripple from the center on a beat: a crest that runs out along scaled-down copies of the shape and fades.
-// rr is the superellipse norm (0 center, 1 rim), r is age and strength. Positive pushes outward, negative inward.
-float ring(float rr, vec2 r) {
-  float x = (rr - r.x * 1.9) / 0.045;
-  return x * exp(-x * x) * r.y * exp(-5.0 * r.x);
-}
-
-// A drop: a small round ripple from d.xy, quicker and shorter-lived than the beat ring, like rain on glass.
+// A drop: a small round ripple from d.xy where a tap lands.
 // xy bends the image; z is the crest's slope toward the light L, for a glint that shows on empty glass too.
 vec3 drop(vec2 p, vec4 d, vec2 L) {
   vec2 v = p - d.xy;
@@ -274,14 +265,12 @@ void main() {
   vec2 dir = normalize(mix(nrm, p / max(length(p), 1e-3), 0.45 * u_liquid));
   // The sound terms are separate additions, not folded into the old ones: with sound off they add exactly 0.
   vec2 ripple = wv * 0.05 * u_liquid * nearEdge * side + wv * 0.012 * u_sound.x * nearEdge * side;
-  // Beat ripples bend whatever they pass over, the glyph too; the colors split on them below.
-  float rr = 1.0 - depth + wob;
+  // Tap ripples bend whatever they pass over, the glyph too.
   // The light follows the lean; the logo under the glass shifts the other way, more under a thicker slab: parallax.
   vec2 L = normalize(vec2(-0.55, 0.85) + u_tilt * 0.9);
   vec2 par = -u_tilt * (0.03 + 0.12 * u_volume * u_depth);
-  float beatRing = ring(rr, u_ring.xy) + ring(rr, u_ring.zw);
-  vec2 wake = nrm * beatRing * 0.035;
-  float ripGlint = beatRing * dot(nrm, L);
+  vec2 wake = vec2(0.0);
+  float ripGlint = 0.0;
   for (int j = 0; j < 4; j++) {
     vec3 dj = drop(p, u_drops[j], L);
     wake += dj.xy * 0.025;
@@ -398,7 +387,7 @@ void main() {
 const UNIFORMS = [
   "u_sdf", "u_color", "u_texSize", "u_halfPx", "u_n", "u_edge", "u_refract", "u_disp", "u_phase",
   "u_motion", "u_size", "u_tint", "u_sideMix", "u_sideTwo", "u_angle", "u_spread", "u_liquid", "u_volume", "u_depth", "u_bg", "u_mode",
-  "u_sound", "u_ring", "u_bands", "u_drops", "u_tilt", "u_zoom", "u_shadow",
+  "u_sound", "u_bands", "u_drops", "u_tilt", "u_zoom", "u_shadow",
 ];
 const SILENT = [0, 0, 0, 0];
 const NO_BANDS = new Float32Array(8);
@@ -515,7 +504,6 @@ export class GlassRenderer {
     gl.uniform3fv(this.loc.u_bg, params.bg);
     gl.uniform1f(this.loc.u_mode, params.background === "light" ? 0 : params.background === "dark" ? 1 : 2);
     gl.uniform4fv(this.loc.u_sound, params.sound ?? SILENT);
-    gl.uniform4fv(this.loc.u_ring, params.ring ?? SILENT);
     gl.uniform1fv(this.loc.u_bands, params.bands ?? NO_BANDS);
     gl.uniform4fv(this.loc.u_drops, params.drops ?? NO_DROPS);
     gl.uniform2fv(this.loc.u_tilt, params.tilt ?? STILL);

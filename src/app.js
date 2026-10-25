@@ -350,27 +350,22 @@ function previewSize() {
   return Math.min(Math.round(css * Math.min(devicePixelRatio, 2)), 1400);
 }
 
-// Sound on top of the settings, kept to the restraint of the still glass. A beat has one accent: the refraction
-// leans in and eases back. Bass thickens the slab a touch; the shader tints the rim fringe by band, breathes the waves
-// and runs a thin ripple. With reduced motion the ripples stay off. Silent: the same object, nothing changes.
+// Sound on top of the settings, kept to the restraint of the still glass. A beat has one accent: the lens pulls
+// the logo into the rim and eases back. Bass thickens the slab a touch; the shader tints the rim fringe by band
+// and breathes the waves. Silent: the same object, nothing changes.
 function live(p) {
   const { level, bass, hit, bands } = sound;
-  const rings = reducedMotion ? [] : sound.rings;
-  const drops = reducedMotion ? [] : sound.drops;
-  if (!level && !bass && !hit && !rings.length && !drops.length && !bands.some(Boolean)) return p;
-  const [a, b] = rings;
+  if (!level && !bass && !hit && !bands.some(Boolean)) return p;
   return {
     ...p,
     volume: p.volume + 0.1 * bass,
-    refraction: p.refraction + 0.35 * hit,
+    refraction: p.refraction + 0.6 * hit,
     sound: [level, bass, hit, 0],
-    ring: [a?.age ?? 0, a?.amp ?? 0, b?.age ?? 0, b?.amp ?? 0],
     bands,
-    drops: packDrops(drops),
   };
 }
 
-// The four newest ripples, from the sound and from taps, as the shader takes them.
+// The four newest tap ripples, as the shader takes them.
 function packDrops(list) {
   const packed = new Float32Array(16);
   list.slice(0, 4).forEach((d, i) => packed.set([d.x, d.y, d.age, d.amp], i * 4));
@@ -404,7 +399,7 @@ function lean(dt) {
 function feel(p) {
   if (!tilt[0] && !tilt[1] && !touches.length) return p;
   const out = { ...p, tilt: [tilt[0], tilt[1]] };
-  if (touches.length) out.drops = packDrops([...touches, ...(reducedMotion ? [] : sound.drops)].sort((a, b) => a.age - b.age));
+  if (touches.length) out.drops = packDrops(touches);
   return out;
 }
 

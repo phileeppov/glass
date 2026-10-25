@@ -1,4 +1,4 @@
-// Sound in, a few numbers out: loudness, bass, eight frequency bands, beats and sparks,
+// Sound in, a few numbers out: loudness, bass, eight frequency bands and beats,
 // read from the demo tune, a track or the mic with Web Audio.
 // Nothing is uploaded: the mic and the track are only analysed in the browser.
 import { BEAT, TUNE_LENGTH, chime, renderTune } from "./tune.js";
@@ -10,9 +10,6 @@ const FFT = 2048;
 // low to high as red to violet, the way glass splits light: long waves on one side, short on the other.
 export const BANDS = 8;
 const EDGES = Array.from({ length: BANDS + 1 }, (_, i) => 40 * 300 ** (i / BANDS));
-const RINGS = 2; // beat ripples alive at once
-const DROPS = 2; // spark drops alive at once
-const RING_AT = 0.75; // beat strength that sends a ripple from the center: the strong ones only
 
 // Peak picking on an onset curve: fires just past the top of a rise well above the recent mean,
 // with strength against the recent strongest onset.
@@ -56,9 +53,7 @@ export class Sound {
   level = 0; // loudness 0..1, against the recent peak, so a quiet track moves the glass as much as a loud one
   bass = 0; // 40–160 Hz, 0..1, the same way
   bands = new Float32Array(BANDS); // 0..1 each, the same way
-  hit = 0; // a beat: jumps up, then fades over ~0.25 s
-  rings = []; // ripples from the center on strong beats, newest first: { age: s, amp: 0..1 }
-  drops = []; // small ripples where a hat or a click lands: { x, y, age, amp }
+  hit = 0; // a beat: jumps up, then fades over ~0.35 s
 
   ctx = null;
   analyser = null;
@@ -80,9 +75,7 @@ export class Sound {
   peakBands = new Float32Array(BANDS);
   peakLowFlux = 0;
   peakLogFlux = 0;
-  peakHighFlux = 0;
   beats = new Onset(0.14);
-  sparks = new Onset(0.07);
   sig = 0; // a few samples of the last buffer, to spot a frame with no new audio
   wait = 0; // time since the last frame that had new audio, s
   last = { level: 0, bass: 0, bands: new Float32Array(BANDS) };
@@ -163,8 +156,7 @@ export class Sound {
     const prev = this.lastPos;
     this.lastPos = pos;
     const crossed = (step) => pos < prev || Math.floor(pos / step) !== Math.floor(prev / step);
-    const beat = crossed(BEAT) ? 1 : 0;
-    return { beat, spark: !beat && crossed(BEAT / 2) ? 0.8 : 0 };
+    return { beat: crossed(BEAT) ? 1 : 0 };
   }
 
   stopTune() {
@@ -193,7 +185,7 @@ export class Sound {
 
   // The first frames after a switch compare against an old spectrum and would fire a false beat.
   restart() {
-    this.beats.since = this.sparks.since = -0.25;
+    this.beats.since = -0.25;
   }
 
   // iPhone mutes Web Audio with the silent switch unless the page says it plays media.
@@ -276,15 +268,10 @@ export class Sound {
   // so after Off the values fade out instead of snapping to zero.
   update(dtMs) {
     const dt = Math.min(dtMs, 100) / 1000;
-    for (const r of this.rings) r.age += dt;
-    for (const d of this.drops) d.age += dt;
-    this.rings = this.rings.filter((r) => r.age < 1.2);
-    this.drops = this.drops.filter((d) => d.age < 0.9);
-
     let reading = null;
     if (this.mode !== "off" && this.ctx?.state === "running") reading = this.analyse(dt);
     if (reading && this.mode === "demo") reading = { ...reading, ...this.score() };
-    const { level = 0, bass = 0, bands = null, beat = 0, spark = 0 } = reading ?? {};
+    const { level = 0, bass = 0, bands = null, beat = 0 } = reading ?? {};
 
     // Soft release everywhere: glass settles, it doesn't snap back.
     this.level = follow(this.level, level, dt, 0.03, 0.45);
@@ -295,16 +282,8 @@ export class Sound {
       loud += this.bands[b];
     }
     this.hit = Math.max(this.hit * Math.exp(-dt / 0.35), beat);
-    // Only strong beats send a ripple from the center; one on every hat would blur into noise.
-    if (beat > RING_AT) this.rings = [{ age: 0, amp: beat }, ...this.rings].slice(0, RINGS);
-    // A hat, a snare or a click near the mic drops a small ripple somewhere in the glass, like rain.
-    if (spark > 0.65 && this.beats.since > 0.06) {
-      const a = Math.random() * Math.PI * 2;
-      const r = 0.72 * Math.sqrt(Math.random());
-      this.drops = [{ x: r * Math.cos(a), y: r * Math.sin(a), age: 0, amp: spark }, ...this.drops].slice(0, DROPS);
-    }
 
-    const alive = loud > 1e-3 || this.hit > 1e-3 || this.rings.length > 0 || this.drops.length > 0;
+    const alive = loud > 1e-3 || this.hit > 1e-3;
     if (!alive) {
       this.level = this.bass = this.hit = 0;
       this.bands.fill(0);
@@ -330,10 +309,9 @@ export class Sound {
     for (const v of this.time) sum += v * v;
     const rms = Math.sqrt(sum / this.time.length);
 
-    // Flux, how much the spectrum grew since the last frame, finds two kinds of hits.
-    // Beats: the bass band as is (a kick is the loudest jump there) plus everything up to ~3 kHz on a log scale,
-    // where a snare, a clap or a knock near the mic shows up though it has little bass.
-    // Sparks: 3–11 kHz on a log scale, hats and clicks.
+    // Flux, how much the spectrum grew since the last frame, finds the beats: the bass band as is (a kick is
+    // the loudest jump there) plus everything up to ~3 kHz on a log scale, where a snare, a clap or a knock
+    // near the mic shows up though it has little bass.
     const hz = this.ctx.sampleRate / FFT;
     const b0 = Math.max(1, Math.round(40 / hz));
     const b1 = Math.round(160 / hz);
@@ -344,7 +322,6 @@ export class Sound {
     let low = 0;
     let lowFlux = 0;
     let logFlux = 0;
-    let highFlux = 0;
     let band = 0;
     for (let i = 1; i <= f2; i++) {
       const db = this.freq[i];
@@ -362,13 +339,11 @@ export class Sound {
       const m = Math.log1p(mag * 1000);
       const d = Math.max(0, m - this.prev[i]);
       if (i <= f1) logFlux += d;
-      else highFlux += d;
       this.prev[i] = m;
       this.prevMag[i] = mag;
     }
     low /= b1 - b0 + 1;
     logFlux /= f1;
-    highFlux /= f2 - f1;
 
     // Each value against its own slowly falling peak; the floors keep room noise on the mic from being boosted into motion.
     const slow = Math.exp(-dt / 4);
@@ -386,13 +361,11 @@ export class Sound {
     const decay = Math.exp(-dt / 3);
     this.peakLowFlux = Math.max(lowFlux, this.peakLowFlux * decay, 1e-3);
     this.peakLogFlux = Math.max(logFlux, this.peakLogFlux * decay, 0.05);
-    this.peakHighFlux = Math.max(highFlux, this.peakHighFlux * decay, 0.05);
     // On a house track kicks come out at 0.6–1, the off-beat bass and hats near 0.3.
     const beat = this.beats.step(lowFlux / this.peakLowFlux + (0.5 * logFlux) / this.peakLogFlux, dt, rms > 0.01);
-    const spark = this.sparks.step(highFlux / this.peakHighFlux, dt, rms > 0.01);
 
     this.last = { level, bass, bands };
-    return { level, bass, bands, beat, spark };
+    return { level, bass, bands, beat };
   }
 }
 
