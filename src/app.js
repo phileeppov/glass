@@ -741,17 +741,21 @@ textInput.addEventListener("input", () => {
   tell("text");
 });
 for (const sample of root.querySelectorAll("[data-sample]")) {
+  // A mouse press keeps the caret in the field instead of taking focus and folding it.
+  sample.addEventListener("mousedown", (e) => e.preventDefault());
   sample.addEventListener("click", () => {
     clearTimeout(textTimer);
     textInput.value = sample.dataset.sample;
     loadText(sample.dataset.sample);
     tried("text");
     tell("text");
+    // A mark stays in the open field; the ☺ (an empty field) folds it back, unless the caret is still in it.
+    // Safari doesn't focus a tapped button, so the field may have folded on the way here.
+    openText(Boolean(sample.dataset.sample) || document.activeElement === textInput);
   });
 }
 
 // The text field waits folded into an Aa key next to Upload. Focus opens it; left empty, it folds back.
-// A tap on a sample moves focus inside the field's own box, so that doesn't count as leaving.
 const logoIn = root.querySelector("[data-logo-in]");
 const typeBox = textInput.parentElement;
 const uploadKey = root.querySelector(".upload");
@@ -1086,8 +1090,8 @@ function applyLook(preset) {
   for (const [key, value] of Object.entries(preset.ranges)) {
     if (key === "motion" && reducedMotion) continue;
     const el = root.querySelector(`input[name=${key}]`);
-    setHome(el, value);
     el.value = String(value);
+    setHome(el, Number(el.value)); // after the input clamps it: a mangled link may carry a value out of range
     el.dispatchEvent(new Event("input", { bubbles: true }));
   }
   applyingPreset = false;
@@ -1147,7 +1151,7 @@ function randomize() {
   for (const input of root.querySelectorAll("input[name=preset]")) input.checked = false;
   rollKey.classList.add("is-filled");
   showRoll(true);
-  // Mid-recording the renderer is busy with the video; the key gets its picture with the next thumbnails.
+  // Mid-recording the renderer is busy with the video; the key gets its picture when the recording ends (see Dock).
   if (!recording) {
     paintThumb(rollThumb, rolled);
     draw();
@@ -1202,7 +1206,7 @@ if (matchMedia("(hover: hover) and (pointer: fine)").matches) {
 // The dock wears its hairline and frost only while the panel runs under it: stuck to the bottom of the screen,
 // it pokes a pixel past the trimmed edge of the viewport.
 const dock = root.querySelector(".dock");
-new IntersectionObserver(([e]) => dock.classList.toggle("is-stuck", e.intersectionRatio < 1), {
+new IntersectionObserver((entries) => dock.classList.toggle("is-stuck", entries.at(-1).intersectionRatio < 1), {
   threshold: 1,
   rootMargin: "0px 0px -1px 0px",
 }).observe(dock);
@@ -1224,6 +1228,11 @@ new MutationObserver(() => {
     countdown = 0;
     videoName.textContent = RECORD;
     showCaption();
+    // A roll made while the video recorded got no picture then (the renderer was busy): it gets it now.
+    if (rolled) {
+      paintThumb(rollThumb, rolled);
+      draw();
+    }
     return;
   }
   const end = performance.now() + (parseFloat(videoButton.style.getPropertyValue("--rec")) || PERIOD);
@@ -1241,10 +1250,15 @@ const menus = [...root.querySelectorAll(".menu[popover]")];
 const popovers = "popover" in HTMLElement.prototype;
 for (const menu of menus) {
   const opener = root.querySelector(`[popovertarget="${menu.id}"]`);
-  // Without the popover API (Safari before 17) the formats simply show and hide under the keys.
+  // The arrow turns over while its menu is open (and says so to screen readers).
+  opener.setAttribute("aria-expanded", "false");
+  // Without the popover API (Safari before 17) the formats simply show and hide in the dock, under the keys.
   if (!popovers) {
     menu.hidden = true;
-    opener.addEventListener("click", () => (menu.hidden = !menu.hidden));
+    opener.addEventListener("click", () => {
+      menu.hidden = !menu.hidden;
+      opener.setAttribute("aria-expanded", String(!menu.hidden));
+    });
     continue;
   }
   let pointed = false;
@@ -1256,6 +1270,7 @@ for (const menu of menus) {
     menu.style.bottom = `${innerHeight - r.top + 8}px`;
   });
   menu.addEventListener("toggle", (e) => {
+    opener.setAttribute("aria-expanded", String(e.newState === "open"));
     if (e.newState === "open") return void menu.querySelector("input:checked")?.focus({ preventScroll: true });
     trying = null; // a framing tried on hover goes when the menu does
     kick();
@@ -1265,8 +1280,12 @@ for (const menu of menus) {
     if (pointed && e.target.closest("label")) queueMicrotask(() => menu.hidePopover());
     pointed = false;
   });
+  // Enter picks and closes. Without preventDefault the same Enter, landing on the arrow that gets the focus back,
+  // would open the menu again.
   menu.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") menu.hidePopover();
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    menu.hidePopover();
   });
 }
 function closeMenus() {
@@ -1315,6 +1334,7 @@ function openLook() {
   if (!look) return;
   applyLook(look);
   for (const input of root.querySelectorAll("input[name=preset]")) input.checked = false;
+  showRoll(false); // a link's look is neither a preset nor the roll: Random brings the roll back
 }
 
 async function copyLink() {

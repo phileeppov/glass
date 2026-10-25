@@ -115,6 +115,7 @@ h1 {
   color: color-mix(in srgb, var(--color-off-white) 80%, transparent);
 }
 [data-tone="dark"] .looks :focus-visible,
+[data-tone="dark"] .presets .slot:focus-visible,
 [data-tone="dark"] .presets input:focus-visible + span {
   outline-color: var(--color-off-white);
 }
@@ -135,7 +136,6 @@ h1 {
   width: min(100%, 760px, calc(100svh - 190px));
   aspect-ratio: 1;
 }
-/* Under the glass: the presets and the die, one row. */
 /* The keys under the glass share one geometry: --pad of room around the glass on every side of a key, and corners
    that follow the glass: a key's radius is the glass's own plus --pad, so the two curves run side by side. */
 .looks {
@@ -337,15 +337,12 @@ h1 {
   opacity: 1;
 }
 .is-typing .type input {
-  padding: 0 16px;
+  padding: 0 16px 0 14px;
   background: var(--tray);
   box-shadow: inset 0 1px 2px color-mix(in srgb, var(--color-black) 7%, transparent),
     inset 0 0 0 0.5px color-mix(in srgb, var(--color-black) 6%, transparent);
   text-align: left;
   cursor: text;
-}
-.is-typing .type input {
-  padding-left: 14px;
 }
 .is-typing .type input:placeholder-shown {
   padding-right: 96px;
@@ -360,7 +357,7 @@ h1 {
   outline-offset: 2px;
 }
 .is-typing .type input:focus-visible {
-  outline: 1px solid color-mix(in srgb, var(--ink) 30%, transparent);
+  outline: 1.5px solid color-mix(in srgb, var(--ink) 60%, transparent); /* still 3:1 against the tray */
 }
 .samples {
   position: absolute;
@@ -810,11 +807,12 @@ fieldset span {
   bottom: 3px;
   left: 3px;
   width: calc((100% - 6px - (var(--n) - 1) * 2px) / var(--n));
-  transform: translateX(calc(var(--i) * (100% + 2px)));
+  /* translate, not transform: the stretch below is a scale, which would stretch a transform's shift along with the pill. */
+  translate: calc(var(--i) * (100% + 2px)) 0;
   border-radius: 999px;
   background: linear-gradient(180deg, #fff 0%, var(--panel) 100%);
   box-shadow: var(--raise);
-  transition: transform 360ms cubic-bezier(0.3, 1.3, 0.4, 1), opacity 160ms ease-out;
+  transition: translate 360ms cubic-bezier(0.3, 1.3, 0.4, 1), opacity 160ms ease-out;
 }
 /* On its way to the new option the pill stretches a little and settles (app.js replays is-moving on each change). */
 .seg.is-moving::before {
@@ -822,7 +820,7 @@ fieldset span {
 }
 @keyframes stretch {
   45% {
-    scale: 1.16 0.9;
+    scale: 1.1 0.94;
   }
 }
 .seg:has(> label:nth-child(3)) {
@@ -995,11 +993,12 @@ fieldset input:focus-visible + span {
   color: inherit;
   transition: background-color 120ms ease-out;
 }
-.key > button:hover {
+/* Not while disabled: Record video keeps its progress fill under the cursor while it records. */
+.key > button:hover:not(:disabled) {
   filter: none;
   background: color-mix(in srgb, var(--color-black) 3%, transparent);
 }
-.key.dark > button:hover {
+.key.dark > button:hover:not(:disabled) {
   background: rgb(255 255 255 / 0.07);
 }
 .key > button:active {
@@ -1079,10 +1078,20 @@ button:disabled {
   font-size: var(--text-meta);
   letter-spacing: -0.04em;
 }
-/* A fieldset is display: flex in this sheet, which would keep a closed menu on screen. */
-.menu:not(:popover-open),
+/* A fieldset is display: flex in this sheet, which would keep a closed menu on screen. Two rules, not one list:
+   a browser without popovers drops a list with :popover-open whole, [hidden] included. */
+.menu:not(:popover-open) {
+  display: none;
+}
 .menu[hidden] {
   display: none;
+}
+/* Without popovers (Safari before 17, Firefox before 125) the menu opens in the dock itself, under the keys. */
+@supports not selector(:popover-open) {
+  .menu {
+    position: static;
+    display: grid;
+  }
 }
 .menu:popover-open {
   display: grid;
@@ -1268,7 +1277,7 @@ button:disabled {
 .glass {
   interpolate-size: allow-keywords;
 }
-/* Advanced closes the panel, under a hairline like the groups: the finer look settings, then the PNG and video formats. */
+/* Advanced closes the panel, under a hairline like the groups: the finer look settings. The formats live on the keys. */
 .advanced {
   margin-top: 16px;
   padding-top: 8px;
@@ -1474,7 +1483,7 @@ button:disabled {
   }
   /* The glass takes the width, as long as Upload still shows above the dock with the browser's bars out (svh). */
   .stage {
-    width: min(100%, 100svh - 330px);
+    width: min(100%, max(160px, 100svh - 330px)); /* never under 160 px, as on a phone held sideways */
     margin-inline: auto;
   }
   /* Six keys across the phone: as wide as fits (the page less its 24 px sides, the row's 3 px edges and 2 px gaps), 56 px at most. */
