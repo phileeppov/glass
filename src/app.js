@@ -564,6 +564,7 @@ function loop(now) {
 // What the stage eases toward: the settings, or what the mouse is trying on (see "Try on hover").
 function goal() {
   if (trying?.preset) return presetLook(trying.preset);
+  if (trying?.look) return lookOf(trying.look);
   const look = target(params);
   if (trying?.format === "avatar") return { ...look, n: 2, frame: 1, shadow: 0 };
   if (trying?.format === "store") return { ...look, frame: 1, shadow: 0 };
@@ -981,10 +982,11 @@ const PRESETS = {
     checks: { volume: true, spin: false, facets: false },
   },
 };
-// A preset as shader numbers, without touching the inputs: for the thumbnails on the preset keys and for trying a preset on hover.
-// The logo color follows the same rule as the page: a dark logo turns white on a dark background, a white one black on light.
-function presetLook(name, still = false) {
-  const preset = PRESETS[name];
+// A preset (or a roll, which has the same shape) as shader numbers, without touching the inputs: for the thumbnails
+// on the keys and for trying a look on hover. The logo color follows the same rule as the page: a dark logo turns white
+// on a dark background, a white one black on light.
+const presetLook = (name, still = false) => lookOf(PRESETS[name], still);
+function lookOf(preset, still = false) {
   const background = preset.radios.background;
   const dark = background === "dark";
   const color = colorOn(dark);
@@ -1008,20 +1010,23 @@ function presetLook(name, still = false) {
   return { ...look, angle: (angle / 180) * Math.PI };
 }
 
-// Thumbnails: each preset drawn by the main renderer at 192 px, filling the frame, then copied into its key.
-// Light presets render with no background, so the key's tray shows around the glass.
+// Thumbnails: each preset, and the kept roll, drawn by the main renderer at 192 px, filling the frame, then copied into its key.
+// Light looks render with no background, so the key's tray shows around the glass.
 const thumbs = root.querySelectorAll("[data-thumb]");
 function renderThumbs() {
   if (recording) return;
-  for (const thumb of thumbs) {
-    const look = presetLook(thumb.dataset.thumb, true);
-    renderer.setSize(192);
-    renderer.render({ ...look, ...(look.background === "light" ? { background: "none" } : {}), frame: 1, shadow: 0 }, 0);
-    const ctx = thumb.getContext("2d");
-    ctx.clearRect(0, 0, thumb.width, thumb.height);
-    ctx.drawImage(canvas, 0, 0, thumb.width, thumb.height);
-  }
+  for (const thumb of thumbs) paintThumb(thumb, PRESETS[thumb.dataset.thumb]);
+  if (rolled) paintThumb(rollThumb, rolled);
   draw();
+}
+
+function paintThumb(thumb, preset) {
+  const look = lookOf(preset, true);
+  renderer.setSize(192);
+  renderer.render({ ...look, ...(look.background === "light" ? { background: "none" } : {}), frame: 1, shadow: 0 }, 0);
+  const ctx = thumb.getContext("2d");
+  ctx.clearRect(0, 0, thumb.width, thumb.height);
+  ctx.drawImage(canvas, 0, 0, thumb.width, thumb.height);
 }
 
 const PRESET_KEYS = new Set(Object.values(PRESETS).flatMap((p) => [...Object.keys(p.ranges), ...Object.keys(p.radios), ...Object.keys(p.checks)]));
@@ -1061,6 +1066,7 @@ for (const input of root.querySelectorAll("input[name=preset]")) {
   input.addEventListener("change", () => {
     if (!input.checked) return;
     applyPreset(input.value);
+    showRoll(false);
     tell(`preset:${input.value}`);
   });
 }
@@ -1090,24 +1096,60 @@ function randomLook() {
   };
 }
 
+// The last roll is kept in the sixth key, Random, so a preset can be tried and the roll brought back.
+// Tap Random while its roll is on to roll again; tap it after a preset to come back to the roll.
+const rollKey = root.querySelector("[data-roll]");
+const rollThumb = rollKey.querySelector("canvas");
+let rolled = null;
 let rolls = 0;
+
+function showRoll(on) {
+  rollKey.classList.toggle("is-on", on);
+  rollKey.setAttribute("aria-pressed", String(on));
+}
+
 function randomize() {
-  applyLook(randomLook());
+  rolled = randomLook();
+  applyLook(rolled);
   tried("random");
   tell("random");
   for (const input of root.querySelectorAll("input[name=preset]")) input.checked = false;
+  rollKey.classList.add("is-filled");
+  showRoll(true);
+  // Mid-recording the renderer is busy with the video; the key gets its picture with the next thumbnails.
+  if (!recording) {
+    paintThumb(rollThumb, rolled);
+    draw();
+  }
   rolls++;
-  for (const button of root.querySelectorAll("[data-random]")) button.style.setProperty("--turn", `${rolls * 120}deg`);
+  for (const el of root.querySelectorAll("[data-random], [data-roll]")) el.style.setProperty("--turn", `${rolls * 120}deg`);
 }
 
 for (const button of root.querySelectorAll("[data-random]")) button.addEventListener("click", randomize);
+rollKey.addEventListener("click", () => {
+  if (!rolled || rollKey.classList.contains("is-on")) return randomize();
+  trying = null;
+  applyLook(rolled);
+  for (const input of root.querySelectorAll("input[name=preset]")) input.checked = false;
+  showRoll(true);
+});
 
 // --- Try on hover ---
 
-// With a mouse, hovering a preset key shows that look on the stage, and hovering Avatar or App Store shows that framing:
-// the glass eases there and back when the mouse leaves. Nothing is selected until a click. Touch screens skip it.
-let trying = null; // { preset } or { format }
+// With a mouse, hovering a preset key (or Random with a roll in it) shows that look on the stage, and hovering Avatar
+// or App Store shows that framing: the glass eases there and back when the mouse leaves. Nothing is selected until a click.
+// Touch screens skip it.
+let trying = null; // { preset }, { look } or { format }
 if (matchMedia("(hover: hover) and (pointer: fine)").matches) {
+  rollKey.addEventListener("pointerenter", () => {
+    if (!rolled || rollKey.classList.contains("is-on") || recording) return;
+    trying = { look: rolled };
+    kick();
+  });
+  rollKey.addEventListener("pointerleave", () => {
+    trying = null;
+    kick();
+  });
   for (const input of root.querySelectorAll("input[name=preset], input[name=image]")) {
     const key = input.parentElement;
     key.addEventListener("pointerenter", () => {
@@ -1205,6 +1247,7 @@ const clearPreset = (e) => {
   const name = e.target.name;
   if (applyingPreset || !PRESET_KEYS.has(name)) return;
   for (const input of root.querySelectorAll("input[name=preset]")) input.checked = false;
+  showRoll(false); // the roll stays in its key; the glass now shows something else
 };
 root.addEventListener("input", clearPreset);
 root.addEventListener("change", clearPreset);

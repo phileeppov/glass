@@ -25,7 +25,7 @@
             <button type="button" class="soft tilt" data-tilt hidden>Tilt the glass</button>
             <p class="unsupported">WebGL isn't working in this browser, so the glass can't render.</p>
           </div>
-          <!-- Under the glass: the presets, each key your own logo in that look, and the die for a look of its own.
+          <!-- Under the glass: the presets, each key your own logo in that look, and a sixth key for a look of its own.
                The most used control sits next to what it changes. -->
           <div class="looks">
             <fieldset class="presets">
@@ -36,9 +36,10 @@
                 <label><input type="radio" name="preset" value="prism" /><span><canvas width="128" height="128" data-thumb="prism" aria-hidden="true"></canvas>Prism</span></label>
                 <label><input type="radio" name="preset" value="lens" /><span><canvas width="128" height="128" data-thumb="lens" aria-hidden="true"></canvas>Lens</span></label>
                 <label><input type="radio" name="preset" value="night" /><span><canvas width="128" height="128" data-thumb="night" aria-hidden="true"></canvas>Night</span></label>
+                <!-- The sixth key rolls a look of its own and keeps it: try a preset, tap here to come back; tap again to roll again. -->
+                <button type="button" class="slot" data-roll aria-pressed="false"><span><i class="well"><canvas width="128" height="128" data-roll-thumb aria-hidden="true"></canvas><svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><rect x="2.5" y="2.5" width="15" height="15" rx="4" fill="none" stroke="currentColor" stroke-width="1.5" /><circle cx="7" cy="7" r="1.4" fill="currentColor" /><circle cx="13" cy="13" r="1.4" fill="currentColor" /><circle cx="13" cy="7" r="1.4" fill="currentColor" /><circle cx="7" cy="13" r="1.4" fill="currentColor" /><circle cx="10" cy="10" r="1.4" fill="currentColor" /></svg></i>Random</span></button>
               </div>
             </fieldset>
-            <button type="button" class="die" data-random aria-label="Randomize" title="Randomize"><svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><rect x="2.5" y="2.5" width="15" height="15" rx="4" fill="none" stroke="currentColor" stroke-width="1.5" /><circle cx="7" cy="7" r="1.4" fill="currentColor" /><circle cx="13" cy="13" r="1.4" fill="currentColor" /><circle cx="13" cy="7" r="1.4" fill="currentColor" /><circle cx="7" cy="13" r="1.4" fill="currentColor" /><circle cx="10" cy="10" r="1.4" fill="currentColor" /></svg></button>
           </div>
         </div>
       </div>
