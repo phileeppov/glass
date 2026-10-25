@@ -56,13 +56,15 @@ body {
     "stage intro"
     "stage controls"
     "stage foot";
+  /* On a screen taller than the panel, the spare height goes under the footer, not between the title and the panel. */
+  grid-template-rows: auto auto 1fr;
   gap: 24px 40px;
   align-items: start;
 }
-/* Title above the panel, in the right column. */
+/* Title above the panel, in the right column. The title, the panel and the footer share one left edge. */
 .intro {
   grid-area: intro;
-  padding: 56px 4px 0;
+  padding: 56px 0 0;
 }
 h1 {
   font-size: 40px;
@@ -142,12 +144,13 @@ h1 {
   padding: 24px;
 }
 
-/* The settings sit straight on the page, no card behind them: the glass is the only object with depth here. */
+/* The settings sit straight on the page, no card behind them: the glass is the only object with depth here.
+   8 px between controls, 24 px and a hairline between parts. */
 .controls {
   grid-area: controls;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 8px;
   padding: 0 0 20px;
   font-size: var(--text-meta);
 }
@@ -542,16 +545,20 @@ fieldset {
   display: flex;
   flex-wrap: wrap;
 }
-/* Look, Sound, Export: the panel in three parts, each opened by its name over a hairline. No boxes, the order is unchanged. */
+/* The panel's parts open over a hairline, 24 px from the part above. One size of name everywhere: Sound is named
+   like Background, 13 px medium. Look shows no name, its sliders carry theirs on the thumbs. */
 .group {
   display: flex;
   align-items: center;
-  margin: 6px 0 -2px;
-  padding: 14px 0 0;
+  margin: 16px 0 0;
+  padding: 16px 0 0;
   border-top: 0.5px solid color-mix(in srgb, var(--color-black) 10%, transparent);
-  font-size: 15px;
-  font-weight: 600;
+  font-size: var(--text-meta);
+  font-weight: 500;
   letter-spacing: -0.04em;
+}
+.group.rule {
+  padding-top: 8px;
 }
 /* Randomize is a die at the end of the presets: one tap, no label. It turns a third of a turn per roll. */
 .looks .die {
@@ -600,7 +607,11 @@ legend,
 legend {
   width: 100%;
   padding: 0;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
+}
+/* A name under a slider gets the space of a new line of thought: 16 px, not 8. */
+.controls > .range + fieldset {
+  margin-top: 8px;
 }
 /* One selected pill per tray, sliding to the new option (like iOS segmented controls):
    --n is how many options, --i is which one is selected. */
@@ -633,6 +644,13 @@ fieldset span {
   cursor: pointer;
   opacity: 0.6;
   transition: opacity 160ms ease-out;
+}
+/* Every control in the panel is 40 px tall: a 34 px option in a tray with 3 px around it. */
+.controls .seg > label > span {
+  display: grid;
+  place-items: center;
+  height: 34px;
+  padding: 0 6px;
 }
 .seg::before {
   content: "";
@@ -692,11 +710,12 @@ fieldset input:focus-visible + span {
 [data-sides="all"] .directional {
   display: none;
 }
-/* Checkboxes as toggles. */
+/* Checkboxes as toggles. The whole row is the target, 32 px tall, so a finger finds it. */
 .check {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  min-height: 32px;
   cursor: pointer;
 }
 .check input {
@@ -750,7 +769,7 @@ fieldset input:focus-visible + span {
   background: color-mix(in srgb, var(--color-off-white) 86%, transparent);
   -webkit-backdrop-filter: blur(14px);
   backdrop-filter: blur(14px);
-  border-top: 0.5px solid color-mix(in srgb, var(--color-black) 8%, transparent);
+  border-top: 0.5px solid color-mix(in srgb, var(--color-black) 10%, transparent);
 }
 .actions {
   display: grid;
@@ -786,8 +805,6 @@ button:disabled {
 .share.is-save {
   width: 100%;
   align-self: stretch;
-  /* Close to "Record video", like the buttons in .actions (8px), not with the panel's shared gap. */
-  margin-top: -6px;
   padding: 12px 16px;
   background: var(--btn-dark);
   box-shadow: var(--btn-edge);
@@ -883,14 +900,15 @@ button:disabled {
 }
 /* Advanced closes the panel, under a hairline like the groups: the finer look settings, then the PNG and video formats. */
 .advanced {
-  padding-top: 10px;
+  margin-top: 16px;
+  padding-top: 8px;
   border-top: 0.5px solid color-mix(in srgb, var(--color-black) 10%, transparent);
 }
 .advanced summary {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 4px 0;
+  min-height: 32px;
   list-style: none;
   font-weight: 500;
   cursor: pointer;
@@ -942,7 +960,7 @@ button:disabled {
   grid-area: foot;
   display: grid;
   gap: 6px;
-  padding: 8px 20px 0;
+  padding: 8px 0 0;
   font-size: var(--text-meta);
 }
 .bottom p {
@@ -976,14 +994,10 @@ button:disabled {
     row-gap: 16px;
   }
   .controls {
-    gap: 10px;
     padding-bottom: 16px;
   }
   .dock {
     padding: 10px 0;
-  }
-  .share.is-save {
-    margin-top: -2px;
   }
   .controls > .hint:not(.caption) {
     display: none;
@@ -1011,6 +1025,7 @@ button:disabled {
   .glass {
     grid-template-columns: minmax(0, 1fr);
     grid-template-areas: "intro" "stage" "controls" "foot";
+    grid-template-rows: none;
   }
   .intro {
     padding: 0;
