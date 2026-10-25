@@ -744,14 +744,14 @@ async function setSound(mode, file) {
 function soundError(mode, e) {
   const name = e?.name ?? "";
   if (mode === "mic") {
-    if (e?.message === "insecure") return isSecureContext ? "This browser can't use the mic. Try Chrome or Safari." : "The mic only works on a secure (https) page.";
+    if (e?.message === "insecure") return isSecureContext ? "This browser can't use the mic. Try Chrome or Safari." : "The mic only works over HTTPS.";
     if (name === "NotAllowedError" || name === "SecurityError") return "Mic access is blocked. Allow it for this page and try again.";
     if (name === "NotFoundError" || name === "OverconstrainedError") return "No mic found.";
     if (name === "NotReadableError") return "The mic is busy in another app.";
     return "Couldn't start the mic.";
   }
   if (mode === "demo") return "Couldn't play the demo in this browser.";
-  if (name === "NotAllowedError") return "Tap Track to play it.";
+  if (name === "NotAllowedError") return `${touch ? "Tap" : "Click"} Track to play it.`; // mostly after a drop, which is a mouse gesture
   return "Couldn't play that file. Try MP3, M4A or WAV.";
 }
 
@@ -1090,7 +1090,7 @@ async function copyLink() {
   history.replaceState(null, "", url);
   try {
     await navigator.clipboard.writeText(url);
-    say("Link copied. It carries the look, not your logo.");
+    say("Link copied. Your logo isn't in it.");
   } catch {
     say("Couldn't copy. The link is in the address bar.");
   }
@@ -1338,7 +1338,7 @@ videoButton.addEventListener("click", async () => {
     }
   } catch {
     message = audio
-      ? "This browser can't record video with sound. Turn Sound off to record the loop."
+      ? "This browser can't record video with sound. Turn Sound off to record without it."
       : "This browser can't record video. Try Chrome or Safari.";
   } finally {
     recording = false;
@@ -1471,7 +1471,7 @@ function hexToRgb(hex) {
 // What this release added, said once: a line under the title on the first visit, naming what's new.
 // It shortens as you try things and goes when nothing is left. Temporary, so it has a date: two weeks after launch.
 const NEW_UNTIL = Date.parse("2026-11-15"); // set to the launch day plus 14 days when the launch date is known
-const NEW_NAMES = { sound: "sound", text: "typed logos", random: "Randomize", image: "PNG formats", tilt: "tilt" };
+const NEW_NAMES = { sound: "sound", text: "text logos", random: "random looks", image: "PNG formats", tilt: "tilt" };
 const whatsNew = document.querySelector("[data-whatsnew]");
 const seen = [];
 

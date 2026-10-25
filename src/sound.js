@@ -317,7 +317,7 @@ export class Sound {
     const b0 = Math.max(1, Math.round(40 / hz));
     const b1 = Math.round(160 / hz);
     const f1 = Math.round(3000 / hz);
-    const f2 = Math.min(FFT / 2 - 1, Math.round(11000 / hz));
+    const f2 = Math.min(FFT / 2 - 1, Math.round(12000 / hz)); // the top of the last band
     const raw = new Float32Array(BANDS);
     const count = new Float32Array(BANDS);
     let low = 0;
