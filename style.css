@@ -184,37 +184,9 @@ h1 {
 .after[hidden] {
   display: none;
 }
-/* What this release added: a small ink dot next to each new thing, and one line under the title naming them.
-   The word "New" stays in the dot for screen readers. Monochrome, no accent color. */
-.new {
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  margin-left: 6px;
-  padding: 0; /* inside a fieldset legend the segment-label padding would stretch it into an oval */
-  opacity: 1;
-  border-radius: 50%;
-  background: var(--ink);
-  vertical-align: 2px;
-  overflow: hidden;
-  color: transparent;
-  text-indent: 12px;
-  white-space: nowrap;
-}
-.new[hidden],
+/* What this release added: one line under the title on the first visit, after a small ink dot. Monochrome, no accent color. */
 .whatsnew[hidden] {
   display: none;
-}
-/* In the text field the dot sits at the right end. */
-.type {
-  position: relative;
-}
-.type .new {
-  position: absolute;
-  z-index: 1;
-  top: 18px;
-  right: 16px;
-  margin: 0;
 }
 .intro .whatsnew {
   margin-top: 10px;
@@ -512,12 +484,6 @@ fieldset {
   .die svg {
     transition: none;
   }
-}
-.die .new {
-  position: absolute;
-  top: 1px;
-  right: 1px;
-  margin: 0;
 }
 /* For screen readers only: the group name already says it on screen. */
 .sr {
