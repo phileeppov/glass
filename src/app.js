@@ -582,15 +582,27 @@ new ResizeObserver(() => draw()).observe(stage);
 
 // --- Controls ---
 
+// Each slider's home is where the current look (a preset, a roll, a link) put it, marked on the tray by a detent.
+// Dragged near it, the thumb settles on it; a double-click brings the slider back to it.
+const SNAP = 0.025; // share of the slider's travel
+function setHome(input, value) {
+  const min = Number(input.min);
+  input.dataset.home = String(value);
+  input.parentElement.style.setProperty("--d", String((value - min) / (Number(input.max) - min)));
+}
+
 // Read values from the inputs: the browser may restore them after a reload.
 for (const input of root.querySelectorAll("input[type=range]")) {
   const box = input.parentElement;
   const val = box.querySelector(".val");
+  let dragging = false;
   const set = () => {
-    const v = Number(input.value);
     const min = Number(input.min);
+    const span = Number(input.max) - min;
+    if (dragging && Math.abs(Number(input.value) - Number(input.dataset.home)) < SNAP * span) input.value = input.dataset.home;
+    const v = Number(input.value);
     // --p is the thumb position 0..1 for the CSS; .val is the number shown while dragging.
-    box.style.setProperty("--p", String((v - min) / (Number(input.max) - min)));
+    box.style.setProperty("--p", String((v - min) / span));
     // The number goes in an attribute, not text: it's a reading, not page copy.
     if (val) val.dataset.v = input.name === "angle" ? `${Math.round(v)}°` : v.toFixed(2);
     if (input.name === "angle") angleDeg = v;
@@ -600,14 +612,17 @@ for (const input of root.querySelectorAll("input[type=range]")) {
     } else params[input.name] = v;
   };
   if (input.name === "motion" && reducedMotion) input.value = "0";
+  setHome(input, Number(input.defaultValue));
   set();
   input.addEventListener("input", () => {
     set();
     kick();
   });
-  // Double-click a slider to reset it to the default value.
+  // Only a drag snaps: arrow keys step past the detent freely.
+  input.addEventListener("pointerdown", () => (dragging = true));
+  for (const type of ["pointerup", "pointercancel", "blur"]) input.addEventListener(type, () => (dragging = false));
   input.addEventListener("dblclick", () => {
-    input.value = input.defaultValue;
+    input.value = input.dataset.home;
     input.dispatchEvent(new Event("input", { bubbles: true }));
   });
 }
@@ -1056,6 +1071,7 @@ function applyLook(preset) {
   for (const [key, value] of Object.entries(preset.ranges)) {
     if (key === "motion" && reducedMotion) continue;
     const el = root.querySelector(`input[name=${key}]`);
+    setHome(el, value);
     el.value = String(value);
     el.dispatchEvent(new Event("input", { bubbles: true }));
   }

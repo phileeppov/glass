@@ -471,6 +471,18 @@ button:active {
   --tick: color-mix(in srgb, var(--color-black) 14%, transparent);
   clip-path: inset(0 calc((1 - var(--p)) * 100%) 0 0);
 }
+/* The detent: a dot on the tray under where the look put the thumb. It's hidden while the thumb sits on it. */
+.detent {
+  position: absolute;
+  bottom: 5px;
+  left: calc(3px + var(--d, 0.5) * (100% - var(--tw) - 6px) + var(--tw) / 2);
+  width: 4px;
+  height: 4px;
+  margin-left: -2px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--ink) 45%, transparent);
+  pointer-events: none;
+}
 .range input {
   -webkit-appearance: none;
   appearance: none;
