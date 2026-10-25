@@ -150,13 +150,14 @@ export class Sound {
   }
 
   // Demo beats come from the score, not the detector: the tune is ours, so they land exactly, the first one included.
+  // They fall on the thumps, beats one and three: one accent every two beats.
   score() {
     const len = TUNE_LENGTH;
     const pos = (((this.ctx.currentTime - (this.ctx.outputLatency || 0) - this.demoStart) % len) + len) % len;
     const prev = this.lastPos;
     this.lastPos = pos;
     const crossed = (step) => pos < prev || Math.floor(pos / step) !== Math.floor(prev / step);
-    return { beat: crossed(BEAT) ? 1 : 0 };
+    return { beat: crossed(2 * BEAT) ? 1 : 0 };
   }
 
   stopTune() {

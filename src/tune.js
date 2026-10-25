@@ -1,7 +1,7 @@
 // The demo tune and the touch chime: struck glass, synthesized in the browser. No files, no one else's music.
 
 const BPM = 100;
-export const BEAT = 60 / BPM; // s; a thump on every beat, a tick on every off-beat eighth
+export const BEAT = 60 / BPM; // s; a bell on every beat, a thump on beats one and three
 const BARS = 4;
 export const TUNE_LENGTH = BARS * 4 * BEAT; // s, one loop: 9.6
 const TAIL = 2.6; // s of ringing after the last bar, folded back onto the start
@@ -20,14 +20,14 @@ const GLASS = [
 const TOCK = [[1, 1, 0.03], [1.73, 0.6, 0.02]];
 const TICK = [[1, 1, 0.018], [1.47, 0.6, 0.012]];
 const CLINK = [[1, 1, 0.12], [1.71, 0.7, 0.09], [2.63, 0.4, 0.06]];
-// The touch chime: the same glass with its bright upper partials taken out, so a tap rings soft, not sharp.
-const SOFT = [[1, 1, 1.1], [2, 0.22, 0.6], [3.01, 0.05, 0.35]];
+// The touch chime: the same glass with its bright upper partials taken out and a short ring, so a tap sounds soft and brief.
+const SOFT = [[1, 1, 0.5], [2, 0.22, 0.3], [3.01, 0.05, 0.18]];
 
 // A minor, F, C, G: one chord per bar.
 const CHORDS = [[9, 0, 4], [5, 9, 0], [0, 4, 7], [7, 11, 2]];
 const ROOTS = [45, 41, 48, 43]; // bass, MIDI
-// The arpeggio walks the chord tones between E4 and C7, eight notes a bar.
-const STEPS = [0, 2, 4, 5, 4, 2, 3, 1];
+// The arpeggio walks the chord tones between E4 and C7, one note a beat, with air between them.
+const STEPS = [0, 2, 4, 3];
 
 const hz = (midi) => 440 * 2 ** ((midi - 69) / 12);
 
@@ -113,20 +113,22 @@ export async function renderTune() {
     const tones = [];
     for (let m = 64; m <= 96; m++) if (chord.includes(m % 12)) tones.push(m);
     bass.frequency.setValueAtTime(hz(ROOTS[bar]), t0);
-    for (let s = 0; s < 8; s++) {
-      const t = t0 + s * (BEAT / 2);
-      const accent = s % 2 === 0;
-      // The last bar climbs at the end, leading back into the first.
-      strike(ctx, bus, t, hz(tones[STEPS[s] + (bar === 3 && s > 5 ? 2 : 0)]), accent ? 0.16 : 0.1);
-      if (!accent) strike(ctx, bus, t, 6200 + 300 * (s % 4), 0.065, TICK);
-    }
     for (let b = 0; b < 4; b++) {
       const t = t0 + b * BEAT;
-      thump(ctx, dry, t);
-      if (b % 2 === 1) strike(ctx, bus, t, 2350, 0.14, CLINK);
-      bassGain.gain.setValueAtTime(0.05, t);
-      bassGain.gain.linearRampToValueAtTime(0.22, t + 0.3);
+      // The last bar climbs at the end, leading back into the first.
+      strike(ctx, bus, t, hz(tones[STEPS[b] + (bar === 3 && b === 3 ? 2 : 0)]), b % 2 === 0 ? 0.16 : 0.11);
+      if (b % 2 === 0) {
+        // Beats one and three: a thump, and the bass breathes out of it.
+        thump(ctx, dry, t);
+        bassGain.gain.setValueAtTime(0.05, t);
+        bassGain.gain.linearRampToValueAtTime(0.22, t + 0.5);
+      } else {
+        // A tick only on the off-beat after two and four.
+        strike(ctx, bus, t + BEAT / 2, 6200 + 300 * b, 0.06, TICK);
+      }
     }
+    // A clink every other bar, on its last beat.
+    if (bar % 2 === 1) strike(ctx, bus, t0 + 3 * BEAT, 2350, 0.12, CLINK);
   }
   bassGain.gain.setValueAtTime(0.22, TUNE_LENGTH - 0.02);
   bassGain.gain.linearRampToValueAtTime(0, TUNE_LENGTH);
