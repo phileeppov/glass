@@ -1602,20 +1602,26 @@ addEventListener("resize", closeMenus);
 addEventListener("scroll", closeMenus, { passive: true });
 
 // On a phone only the glass is pinned (see .stage in the styles). Once the presets reach the band under it, the page is
-// marked, and what slides under the glass fades out at the band's edge. The band reaches the page's edges: --bleed is
-// how far past the glass they are, without a scrollbar, measured whenever the glass or the page changes width.
+// marked, and what slides under the glass fades out at the band's edge. The bands reach the page's edges: --edge-l and
+// --edge-r are how far past the glass and the presets they are, without a scrollbar, to the fraction of a pixel (a
+// rounded one leaves a hairline of the page at the edge), measured whenever the glass, the row or the page changes width.
 const looksRow = root.querySelector(".looks");
 function under() {
   root.classList.toggle("is-under", looksRow.getBoundingClientRect().top < stage.getBoundingClientRect().bottom + 7);
 }
-function bleed() {
-  stage.style.setProperty("--bleed", `${Math.floor((document.documentElement.clientWidth - stage.offsetWidth) / 2)}px`);
+function edges() {
+  // The page's width as laid out, fractions and all (clientWidth is rounded), without a scrollbar.
+  const width = document.documentElement.getBoundingClientRect().width;
+  for (const el of [stage, looksRow]) {
+    const r = el.getBoundingClientRect();
+    el.style.setProperty("--edge-l", `${r.left}px`);
+    el.style.setProperty("--edge-r", `${width - r.right}px`);
+  }
 }
 addEventListener("scroll", under, { passive: true });
 addEventListener("resize", under);
-const widths = new ResizeObserver(bleed);
-widths.observe(stage);
-widths.observe(document.documentElement);
+const widths = new ResizeObserver(edges);
+for (const el of [stage, looksRow, document.documentElement]) widths.observe(el);
 under();
 
 // --- Link to a look ---

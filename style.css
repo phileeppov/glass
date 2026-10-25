@@ -1626,9 +1626,10 @@ button:disabled {
   }
   /* The glass takes the width, as long as Upload still shows above the dock with the browser's bars out (svh).
      Pinned, it keeps a band of the page's color 8 px over and under it, edge to edge: a dark stage is this band itself.
-     The band is a box of its own, so a tap beside the glass lands on it, not on a key hidden under it. How far the
-     page's edges are past the glass, --bleed, comes from app.js: 100vw would count a scrollbar and widen the page.
-     It runs 1 px into the presets' band, so the two never show a seam. */
+     The band, the fade under it and the presets' band are boxes of their own, so a tap beside the glass lands on the
+     band, not on a key hidden under it. How far the page's edges are past each, --edge-l and --edge-r, comes from
+     app.js, to the fraction of a pixel: 100vw would count a scrollbar and widen the page. The glass's band runs 1 px
+     into the presets' band, so the two never show a seam. */
   .stage {
     grid-area: stage;
     position: sticky;
@@ -1641,7 +1642,7 @@ button:disabled {
     content: "";
     position: absolute;
     z-index: -1;
-    inset: -8px calc(-1 * var(--bleed, 0px)) -9px;
+    inset: -8px calc(-1 * var(--edge-r, 0px)) -9px calc(-1 * var(--edge-l, 0px));
     background: var(--band);
   }
   /* Once the presets reach the band (app.js marks it), what slides under the glass fades out over 20 px instead of
@@ -1650,10 +1651,10 @@ button:disabled {
     content: "";
     position: absolute;
     top: calc(100% + 8px);
-    left: 0;
-    right: 0;
+    left: calc(-1 * var(--edge-l, 0px));
+    right: calc(-1 * var(--edge-r, 0px));
     height: 20px;
-    border-image: linear-gradient(var(--color-off-white), color-mix(in srgb, var(--color-off-white) 0%, transparent)) fill 0 // 0 100vmax;
+    background: linear-gradient(var(--color-off-white), color-mix(in srgb, var(--color-off-white) 0%, transparent));
     opacity: 0;
     transition: opacity 160ms ease-out;
     pointer-events: none;
@@ -1672,7 +1673,15 @@ button:disabled {
     --pad: 6px;
     --key: min(56px, (100vw - 64px) / 6);
     margin: -16px auto 10px;
-    border-image: conic-gradient(var(--band) 0 0) fill 0 // 0 100vmax 10px;
+    position: relative;
+    isolation: isolate;
+  }
+  .looks::before {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    inset: 0 calc(-1 * var(--edge-r, 0px)) -10px calc(-1 * var(--edge-l, 0px));
+    background: var(--band);
   }
   .presets span {
     font-size: 11px;
