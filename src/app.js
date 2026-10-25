@@ -1187,6 +1187,16 @@ if (matchMedia("(hover: hover) and (pointer: fine)").matches) {
   }
 }
 
+// --- Dock ---
+
+// The dock wears its hairline and frost only while the panel runs under it: stuck to the bottom of the screen,
+// it pokes a pixel past the trimmed edge of the viewport.
+const dock = root.querySelector(".dock");
+new IntersectionObserver(([e]) => dock.classList.toggle("is-stuck", e.intersectionRatio < 1), {
+  threshold: 1,
+  rootMargin: "0px 0px -1px 0px",
+}).observe(dock);
+
 // --- Formats ---
 
 // The arrow at the end of each key opens its formats over the key, as wide as the key. A tap on a format picks it and
