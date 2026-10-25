@@ -229,27 +229,39 @@ function unplate(img) {
   const border = [];
   for (let x = 0; x < w; x++) border.push(x, (h - 1) * w + x);
   for (let y = 1; y < h - 1; y++) border.push(y * w, y * w + w - 1);
-  const bg = [0, 1, 2].map((ch) => border.reduce((sum, i) => sum + px[i * 4 + ch], 0) / border.length / 255);
+  // The background is the border's median colour: letters touching the border don't shift it.
+  const bg = [0, 1, 2].map((ch) => {
+    const v = border.map((p) => px[p * 4 + ch]).sort((a, b) => a - b);
+    return v[v.length >> 1] / 255;
+  });
+  const dist = (p) => Math.hypot(px[p * 4] / 255 - bg[0], px[p * 4 + 1] / 255 - bg[1], px[p * 4 + 2] / 255 - bg[2]);
+  // A logo cropped tight touches the border with a letter or two, so most of the border, not all of it, has to be plain.
+  if (border.filter((p) => dist(p) < 0.08).length < border.length * 0.8) return img; // a busy border: a photo
+  if (Math.min(...bg) < 0.86) return img; // plain, but not white: an icon's own plate
   const n = w * h;
   const d = new Float32Array(n); // how far each pixel is from the background colour
-  for (let p = 0; p < n; p++) d[p] = Math.hypot(px[p * 4] / 255 - bg[0], px[p * 4 + 1] / 255 - bg[1], px[p * 4 + 2] / 255 - bg[2]);
-  // A logo cropped tight touches the border with a letter or two, so most of the border, not all of it, has to be plain.
-  if (border.filter((p) => d[p] < 0.08).length < border.length * 0.8) return img; // a busy border: a photo
-  if (Math.min(...bg) < 0.86) return img; // plain, but not white: an icon's own plate
-  // Unmixing. An edge pixel is the logo's colour next to it, blended with white: if a neighbour within 2 px is further
-  // from white and this pixel lies on the line from white to it, it takes that colour, with the opacity of how far along
-  // the line it is. Anything else is a colour of its own and stays solid, so two colours that touch keep their seam.
+  for (let p = 0; p < n; p++) d[p] = dist(p);
+  // Unmixing, only where the logo meets the background: an edge pixel is the logo's colour next to it, blended with
+  // white. If a neighbour within 2 px is further from white and this pixel lies on the line from white to it, it takes
+  // that colour, with the opacity of how far along the line it is. Inside the logo, away from the background, every
+  // pixel keeps its own colour, so shades that touch, grey next to black, keep their seam.
+  const BG_NOISE = 0.035; // up to ±5 levels a channel off white still counts as background: JPEG noise
   const out = new Uint8ClampedArray(px.length);
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       const p = y * w + x;
       const o = p * 4;
-      if (d[p] <= 0.02) continue; // background: transparent
+      if (d[p] <= BG_NOISE) continue; // background: transparent
       let far = p;
+      let edge = false;
       for (let yy = Math.max(0, y - 2); yy <= Math.min(h - 1, y + 2); yy++) {
-        for (let xx = Math.max(0, x - 2); xx <= Math.min(w - 1, x + 2); xx++) if (d[yy * w + xx] > d[far]) far = yy * w + xx;
+        for (let xx = Math.max(0, x - 2); xx <= Math.min(w - 1, x + 2); xx++) {
+          const q = yy * w + xx;
+          if (d[q] <= BG_NOISE) edge = true;
+          if (d[q] > d[far]) far = q;
+        }
       }
-      if (d[far] > d[p] * 1.08) {
+      if (edge && d[far] > d[p] * 1.08) {
         const q = far * 4;
         let dot = 0;
         let len = 0;
@@ -267,12 +279,12 @@ function unplate(img) {
           continue;
         }
       }
-      if (d[p] >= 0.3) {
+      if (d[p] >= 0.3 || !edge) {
         out.set(px.subarray(o, o + 3), o);
         out[o + 3] = 255;
       } else {
-        // Faint and alone: a hairline or noise. Its own colour with the white taken back out.
-        const t = (d[p] - 0.02) / 0.28;
+        // Faint, at the background, with nothing darker beside it: a hairline. Its own colour with the white taken back out.
+        const t = (d[p] - BG_NOISE) / (0.3 - BG_NOISE);
         for (let ch = 0; ch < 3; ch++) out[o + ch] = (bg[ch] + (px[o + ch] / 255 - bg[ch]) / t) * 255;
         out[o + 3] = t * 255;
       }
@@ -314,7 +326,7 @@ function trim(img) {
 function buildLogo(img, crop) {
   // Solid and close to square: a photo or an icon on its own plate. A wide or tall one keeps its shape and sits in the glass.
   const aspect = crop.w / crop.h;
-  fill = crop.solid > 0.95 && aspect > 0.75 && aspect < 1.33;
+  fill = crop.solid > 0.935 && aspect >= 0.74 && aspect <= 1.34;
   if (fill) {
     const side = Math.min(crop.w, crop.h);
     crop = { x: crop.x + (crop.w - side) / 2, y: crop.y + (crop.h - side) / 2, w: side, h: side };
@@ -663,12 +675,18 @@ applyColor();
 // Decided by the logo's own luminance, not just for the demo smiley.
 // A white logo disappears on light glass the same way, so it turns black there. A photo keeps its own colors.
 function fitColorToBackground() {
-  if (fill) return;
-  const dark = params.background === "dark";
+  const color = colorOn(params.background === "dark");
+  if (color !== logoColor) setColor(color, true);
+}
+
+// The logo colour a background calls for, from the current one. Trying a preset on uses it too, so it shows what a click gives.
+function colorOn(dark) {
+  if (fill) return logoColor;
   const pale = logoLuma > 0.85;
-  if (dark && (logoColor === "black" || (logoColor === "original" && logoLuma < 0.3))) setColor("white", true);
-  else if (!dark && logoColor === "white") setColor(autoColor && !pale ? "original" : "black", true);
-  else if (!dark && logoColor === "original" && pale) setColor("black", true);
+  if (dark && (logoColor === "black" || (logoColor === "original" && logoLuma < 0.3))) return "white";
+  if (!dark && logoColor === "white") return autoColor && !pale ? "original" : "black";
+  if (!dark && logoColor === "original" && pale) return "black";
+  return logoColor;
 }
 
 function setColor(c, auto = false) {
@@ -950,11 +968,8 @@ function presetLook(name, still = false) {
   const preset = PRESETS[name];
   const background = preset.radios.background;
   const dark = background === "dark";
-  const white = !fill && dark && (logoColor === "black" || logoColor === "white" || (logoColor === "original" && logoLuma < 0.3));
-  // On light a pale logo turns black, whether it shows its own colour or was turned white on a dark page (see fitColorToBackground).
-  const pale = !fill && logoLuma > 0.85 && (logoColor === "original" || (logoColor === "white" && autoColor));
-  const black = !dark && (logoColor === "black" || pale);
-  const tint = white ? [1, 1, 1] : black ? hexToRgb(tokens.getPropertyValue("--color-black")) : logoColor === "white" && !autoColor ? [1, 1, 1] : null;
+  const color = colorOn(dark);
+  const tint = color === "white" ? [1, 1, 1] : color === "black" ? hexToRgb(tokens.getPropertyValue("--color-black")) : null;
   const { angle = angleDeg, thickness: slab = thickness, motion = params.motion, ...ranges } = preset.ranges;
   const keepTint = lastTint;
   const look = target({
