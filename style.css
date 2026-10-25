@@ -65,7 +65,7 @@ body {
   padding: 56px 4px 0;
 }
 h1 {
-  font-size: clamp(48px, 5vw, 72px);
+  font-size: 40px;
   font-weight: 500;
   line-height: 0.95;
   letter-spacing: -0.065em;
@@ -90,12 +90,25 @@ h1 {
   height: calc(100svh - 40px);
   display: grid;
   place-items: center;
+  align-content: center;
+  row-gap: 14px;
   width: 100%;
 }
+/* The glass sizes to the screen, minus the row of presets under it. */
 .stage {
   position: relative;
-  width: min(100%, 720px, calc(100svh - 80px));
+  width: min(100%, 640px, calc(100svh - 190px));
   aspect-ratio: 1;
+}
+/* Under the glass: the presets and the die, one row. */
+.looks {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: min(100%, 460px);
+}
+.looks .presets {
+  flex: 1;
 }
 .caption {
   text-align: center;
@@ -129,22 +142,14 @@ h1 {
   padding: 24px;
 }
 
-/* All settings in one soft panel: near-white, large radius,
-   a light top edge and a wide soft shadow. */
+/* The settings sit straight on the page, no card behind them: the glass is the only object with depth here. */
 .controls {
   grid-area: controls;
   display: flex;
   flex-direction: column;
   gap: 14px;
-  padding: 20px;
-  border-radius: 28px;
+  padding: 0 0 20px;
   font-size: var(--text-meta);
-  background: linear-gradient(180deg, #fff 0%, var(--panel) 100%);
-  border: 0.5px solid color-mix(in srgb, var(--color-black) 8%, transparent);
-  box-shadow:
-    inset 0 1px 0 #fff,
-    0 1px 2px color-mix(in srgb, var(--color-black) 5%, transparent),
-    0 16px 40px -16px color-mix(in srgb, var(--color-black) 22%, transparent);
 }
 .upload input,
 .track-input {
@@ -192,7 +197,7 @@ h1 {
   margin-top: 10px;
   font-size: var(--text-meta);
   opacity: 0.6;
-  text-wrap: pretty;
+  text-wrap: balance; /* two even lines, not a pair of words left on the second */
 }
 .whatsnew::before {
   content: "";
@@ -323,6 +328,15 @@ button:hover {
 .upload span:active,
 button:active {
   transform: scale(0.985);
+}
+/* Upload is a white key, like Record video: the one black button on the page is Download PNG. */
+.upload span {
+  background: linear-gradient(180deg, #fff 0%, var(--panel) 100%);
+  box-shadow: var(--raise);
+  color: var(--ink);
+}
+.upload span:hover {
+  filter: brightness(0.98);
 }
 .upload:focus-within span {
   outline: 2px solid var(--ink);
@@ -455,24 +469,24 @@ fieldset {
   font-weight: 600;
   letter-spacing: -0.04em;
 }
-/* Randomize sits in the Look heading as a die: one tap, no label, no row of its own. It turns a third of a turn per roll. */
-.group .die {
+/* Randomize is a die at the end of the presets: one tap, no label. It turns a third of a turn per roll. */
+.looks .die {
   position: relative;
+  flex: none;
   display: grid;
   place-items: center;
-  width: 32px;
-  height: 32px;
-  margin-left: auto;
+  width: 36px;
+  height: 36px;
   padding: 0;
   border-radius: 50%;
   background: linear-gradient(180deg, #fff 0%, var(--panel) 100%);
   box-shadow: var(--raise);
   color: var(--ink);
 }
-.group .die:hover {
+.looks .die:hover {
   filter: brightness(0.98);
 }
-.group .die:focus-visible {
+.looks .die:focus-visible {
   outline: 2px solid var(--ink);
   outline-offset: 2px;
 }
@@ -648,9 +662,8 @@ fieldset input:focus-visible + span {
   display: flex;
   flex-direction: column;
   gap: inherit;
-  margin-inline: -20px;
-  padding: 12px 20px;
-  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  padding: 12px 0;
+  background: color-mix(in srgb, var(--color-off-white) 86%, transparent);
   -webkit-backdrop-filter: blur(14px);
   backdrop-filter: blur(14px);
   border-top: 0.5px solid color-mix(in srgb, var(--color-black) 8%, transparent);
@@ -745,13 +758,13 @@ button:disabled {
 .presets span {
   display: grid;
   justify-items: center;
-  gap: 2px;
+  gap: 3px;
   padding-block: 6px 5px;
-  font-size: 11px;
+  font-size: 12px;
 }
 .presets canvas {
-  width: 40px;
-  height: 40px;
+  width: 56px;
+  height: 56px;
   border-radius: 24%; /* hides the dark corners of the Night key */
 }
 /* The glass stays at full strength on every key; only the names of the unselected ones dim. */
@@ -762,9 +775,12 @@ button:disabled {
 .presets input:checked + span {
   color: var(--ink);
 }
-/* A taller tray: softer corners instead of a pill, or the selection turns into an oval. */
+/* Under the glass the tray itself is gone: only the selected key is raised. Softer corners than a pill,
+   or the selection turns into an oval. */
 .presets .seg {
   border-radius: 22px;
+  background: none;
+  box-shadow: none;
 }
 .presets .seg::before {
   border-radius: 19px;
@@ -870,7 +886,6 @@ button:disabled {
     padding-top: 44px;
   }
   h1 {
-    font-size: 52px;
     margin-bottom: 8px;
   }
   .glass {
@@ -878,11 +893,10 @@ button:disabled {
   }
   .controls {
     gap: 10px;
-    padding: 16px;
+    padding-bottom: 16px;
   }
   .dock {
-    margin-inline: -16px;
-    padding: 10px 16px;
+    padding: 10px 0;
   }
   .share.is-save {
     margin-top: -2px;
@@ -897,10 +911,11 @@ button:disabled {
   .drop-hint {
     display: none;
   }
-  /* On a phone the dock is under the thumb: Download PNG and Record video side by side, tighter. */
+  /* On a phone the dock is under the thumb, edge to edge: Download PNG and Record video side by side, tighter. */
   .dock {
     gap: 8px;
-    padding: 10px 20px;
+    margin-inline: -24px;
+    padding: 10px 24px;
   }
   .dock .actions {
     grid-template-columns: 1fr 1fr;
@@ -934,8 +949,20 @@ button:disabled {
     display: block;
   }
   .stage {
-    width: min(100%, 42vh);
+    width: min(100%, 38vh);
     margin-inline: auto;
+  }
+  .looks {
+    margin: 8px auto 0;
+    width: min(100%, 400px);
+    gap: 8px;
+  }
+  .presets canvas {
+    width: 44px;
+    height: 44px;
+  }
+  .presets span {
+    font-size: 11px;
   }
 }
 
