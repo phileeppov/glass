@@ -44,16 +44,20 @@
       </div>
 
       <form class="controls" autocomplete="off" onsubmit="return false">
-        <label class="upload">
-          <span>Upload logo</span>
-          <input type="file" accept=".svg,image/svg+xml,image/png,image/jpeg,image/webp" />
-        </label>
-        <div class="type">
-          <input type="text" name="text" maxlength="12" placeholder="Type a letter, word or emoji" enterkeyhint="done" spellcheck="false" aria-label="Type a letter, word or emoji" data-text />
-          <div class="samples" role="group" aria-label="Try one">
-            <button type="button" data-sample="">☺</button>
-            <button type="button" data-sample="A">A</button>
-            <button type="button" data-sample="★">★</button>
+        <!-- The logo comes in one row: Upload is the wide key, the text field waits next to it folded into an Aa key.
+             A tap on Aa opens the field and folds Upload to its arrow; an empty field folds back. -->
+        <div class="logo-in" data-logo-in>
+          <label class="upload">
+            <span><svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><path d="M10 14V4.5M5.8 8.6 10 4.4l4.2 4.2M4.5 15.5h11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg><i>Upload logo</i></span>
+            <input type="file" accept=".svg,image/svg+xml,image/png,image/jpeg,image/webp" />
+          </label>
+          <div class="type">
+            <input type="text" name="text" maxlength="12" placeholder="Aa" data-open-placeholder="Type a letter, word or emoji" enterkeyhint="done" spellcheck="false" aria-label="Type a letter, word or emoji" data-text />
+            <div class="samples" role="group" aria-label="Try one">
+              <button type="button" data-sample="">☺</button>
+              <button type="button" data-sample="A">A</button>
+              <button type="button" data-sample="★">★</button>
+            </div>
           </div>
         </div>
         <p class="hint drop-hint">Or drop an SVG or PNG anywhere. From Figma: Copy as SVG, then paste.</p>

@@ -97,6 +97,7 @@ async function loadFile(file, via) {
   if (isAudio(file)) return void setSound("track", file); // a song dropped or pasted on the page plays as the track
   textInput.value = "";
   textTurn++; // a word still loading must not replace the file
+  if (document.activeElement !== textInput) openText(false);
   if (autoColor) setColor("original");
   if (file.type === "image/svg+xml" || file.name.toLowerCase().endsWith(".svg")) {
     await loadSvg(await file.text(), via);
@@ -720,6 +721,20 @@ for (const sample of root.querySelectorAll("[data-sample]")) {
   });
 }
 
+// The text field waits folded into an Aa key next to Upload. Focus opens it; left empty, it folds back.
+// A tap on a sample moves focus inside the field's own box, so that doesn't count as leaving.
+const logoIn = root.querySelector("[data-logo-in]");
+const typeBox = textInput.parentElement;
+const FOLDED = textInput.placeholder;
+function openText(open) {
+  logoIn.classList.toggle("is-typing", open);
+  textInput.placeholder = open ? textInput.dataset.openPlaceholder : FOLDED;
+}
+textInput.addEventListener("focus", () => openText(true));
+typeBox.addEventListener("focusout", (e) => {
+  if (!textInput.value && !typeBox.contains(e.relatedTarget)) openText(false);
+});
+
 // A file can be dropped anywhere on the page; while it's being dragged, the stage is highlighted.
 let dragDepth = 0;
 document.addEventListener("dragenter", (e) => {
@@ -1206,6 +1221,7 @@ document.addEventListener("paste", (e) => {
     e.preventDefault();
     textInput.value = "";
     textTurn++;
+    if (document.activeElement !== textInput) openText(false);
     if (autoColor) setColor("original");
     loadSvg(text, "paste");
   }
