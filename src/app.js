@@ -79,13 +79,15 @@ try {
   renderer = new GlassRenderer(canvas);
 } catch {
   root.classList.add("is-unsupported");
+  tell("error:webgl");
   throw new Error("WebGL is not available");
 }
 
 // --- Telling ---
 
 // What people do here, by name, for whoever listens. On phileeppov.com a separate script counts these anonymously:
-// the name only, never a logo, a file name or a value. Here nobody listens, and nothing leaves the page.
+// the name only, never a logo, a file name or a value. Here nobody listens, and nothing leaves the page. What failed is
+// told the same way, as error:<what>: webgl, image, a sound mode (demo, mic, track), record, record-sound, tilt.
 function tell(name) {
   root.dispatchEvent(new CustomEvent("glass:tell", { detail: name }));
 }
@@ -117,7 +119,10 @@ function isAudio(file) {
 async function loadSvg(text, via) {
   const doc = new DOMParser().parseFromString(text, "image/svg+xml");
   const svg = doc.documentElement;
-  if (svg.nodeName.toLowerCase() !== "svg") return say("Couldn't read that SVG.");
+  if (svg.nodeName.toLowerCase() !== "svg") {
+    tell("error:image");
+    return say("Couldn't read that SVG.");
+  }
   solidify(svg);
   const vb = (svg.getAttribute("viewBox") ?? "").split(/[\s,]+/).map(Number);
   const w = parseFloat(svg.getAttribute("width") ?? "") || vb[2] || 100;
@@ -151,6 +156,7 @@ async function loadUrl(url, via) {
     await img.decode();
   } catch {
     URL.revokeObjectURL(url);
+    tell("error:image");
     return say("Couldn't open that image.");
   }
   try {
@@ -158,6 +164,7 @@ async function loadUrl(url, via) {
     buildLogo(source, trim(source));
   } catch {
     // For example, an SVG with <foreignObject> (background blur from Figma): the browser won't let us read the pixels.
+    tell("error:image");
     return say("Couldn't open that image.");
   } finally {
     URL.revokeObjectURL(url);
@@ -1065,6 +1072,7 @@ async function setSound(mode, file) {
     say(soundError(mode, e));
     // Playback refused because there was no tap yet (a file dropped on a fresh page): the track stays, a tap on Track starts it.
     if (mode === "track" && e?.name === "NotAllowedError" && sound.hasTrack) return;
+    tell(`error:${mode}`);
     sound.off();
     showSound("off");
   }
@@ -1163,6 +1171,11 @@ const PHONE_LEAN = 1.5;
 const phoneLean = (degrees) => clamp1(degrees / 12) * PHONE_LEAN;
 function onOrient(e) {
   if (e.beta == null || e.gamma == null) return;
+  // Angles came without asking: the button that asks isn't needed here.
+  if (!grip && !tiltButton.hidden) {
+    tiltButton.hidden = true;
+    showNew();
+  }
   grip ??= { beta: e.beta, gamma: e.gamma };
   grip.beta += (e.beta - grip.beta) * 0.004;
   grip.gamma += (e.gamma - grip.gamma) * 0.004;
@@ -1174,19 +1187,35 @@ function onOrient(e) {
   kick();
 }
 
-// iPhone asks for motion access, and only after a tap: one button on the stage. Elsewhere tilt just works.
+// iPhone asks for motion access, and only after a tap: one button on the stage. Elsewhere tilt just works. Newer Chrome
+// on Android has the same requestPermission, but its motion sensors are allowed by default, so the page always listens:
+// where the sensors say granted, no button; where they don't, the button shows, and goes once angles come anyway (an
+// in-app browser may answer the query oddly). Safari doesn't know these names, so the query fails there.
+async function sensorsGranted() {
+  try {
+    const states = await Promise.all(["accelerometer", "gyroscope"].map((name) => navigator.permissions.query({ name })));
+    return states.every((s) => s.state === "granted");
+  } catch {
+    return false;
+  }
+}
 if (!reducedMotion && matchMedia("(pointer: coarse)").matches && typeof DeviceOrientationEvent !== "undefined") {
-  if (typeof DeviceOrientationEvent.requestPermission === "function") tiltButton.hidden = false;
-  else addEventListener("deviceorientation", onOrient);
+  addEventListener("deviceorientation", onOrient);
+  if (typeof DeviceOrientationEvent.requestPermission === "function")
+    sensorsGranted().then((granted) => {
+      if (granted || grip) return;
+      tiltButton.hidden = false;
+      showNew();
+    });
 }
 tiltButton.addEventListener("click", async () => {
   try {
     if ((await DeviceOrientationEvent.requestPermission()) !== "granted") throw new Error("denied");
-    addEventListener("deviceorientation", onOrient);
     tiltButton.hidden = true;
     tried("tilt");
     tell("tilt");
   } catch {
+    tell("error:tilt");
     say("Motion access is off, so the glass won't tilt.");
   }
 });
@@ -1839,7 +1868,10 @@ videoButton.addEventListener("click", async () => {
     ? ["video/mp4;codecs=avc1.640028,mp4a.40.2", "video/mp4;codecs=avc1,mp4a.40.2", "video/mp4", "video/webm;codecs=vp9,opus", "video/webm"]
     : ["video/mp4;codecs=avc1.640028", "video/mp4", "video/webm;codecs=vp9", "video/webm"];
   const type = typeof MediaRecorder === "undefined" ? undefined : types.find((t) => MediaRecorder.isTypeSupported(t));
-  if (!type) return say("This browser can't record video. Try Chrome or Safari.");
+  if (!type) {
+    tell("error:record");
+    return say("This browser can't record video. Try Chrome or Safari.");
+  }
   const demo = sound.mode === "demo";
   const length = !audio ? PERIOD : demo ? LOOP * 1000 : CLIP;
 
@@ -1940,12 +1972,14 @@ videoButton.addEventListener("click", async () => {
       if (!mp4) message = "Saved as WebM. For X, record in Chrome or Safari.";
     } else {
       message = "This browser can't record video. Try Chrome or Safari.";
+      tell("error:record");
     }
   } catch (e) {
     // A recording whose sound stopped: the next touch brings the sound back, so another try works.
     if (e?.message === "stalled") message = "Couldn't record the video with sound. Try again.";
     else if (audio) message = "This browser can't record video with sound. Turn Sound off to record without it.";
     else message = "This browser can't record video. Try Chrome or Safari.";
+    tell(audio ? "error:record-sound" : "error:record");
   } finally {
     recording = false;
     clipInput.disabled = false;

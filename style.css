@@ -288,7 +288,7 @@ h1 {
     transition: none;
   }
 }
-/* iPhone only: the one button that asks for motion access, on the stage itself, under the glass. */
+/* Where motion access has to be asked for (iPhone): the one button that asks, on the stage itself, under the glass. */
 .tilt {
   position: absolute;
   left: 50%;
