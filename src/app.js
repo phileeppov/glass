@@ -23,6 +23,7 @@ const fileInput = root.querySelector("input[type=file]");
 const pngButton = root.querySelector("[data-png]");
 const videoButton = root.querySelector("[data-video]");
 const status = root.querySelector("[data-status]");
+const soundStatus = root.querySelector("[data-sound-status]");
 const shareButton = root.querySelector("[data-share]");
 const trackInput = root.querySelector("[data-track]");
 const textInput = root.querySelector("[data-text]");
@@ -87,7 +88,8 @@ try {
 
 // What people do here, by name, for whoever listens. On phileeppov.com a separate script counts these anonymously:
 // the name only, never a logo, a file name or a value. Here nobody listens, and nothing leaves the page. What failed is
-// told the same way, as error:<what>: webgl, image, a sound mode (demo, mic, track), record, record-sound, tilt.
+// told the same way, as error:<what>: webgl, image, a sound mode (demo, track; the mic with its reason: mic-denied,
+// mic-none, mic-busy, mic-unsupported, mic-other), record, record-sound, tilt.
 function tell(name) {
   root.dispatchEvent(new CustomEvent("glass:tell", { detail: name }));
 }
@@ -1065,27 +1067,48 @@ async function setSound(mode, file) {
     else if (mode === "mic") await sound.mic();
     else if (mode === "track") await sound.track(file);
     else sound.off();
-    if (sound.wanted === mode) say(mode === "track" ? `♪ ${sound.name}` : "");
+    // A sound that started says so under Sound, and clears what the keys below said about the last one ("Turn Sound off…").
+    if (sound.wanted === mode) {
+      saySound(mode === "track" ? `♪ ${sound.name}` : "");
+      if (!recording) say("");
+    }
     if (sound.wanted === mode && mode !== "off") tell(`sound:${mode}`); // the mode only, never the track's name
   } catch (e) {
     if (sound.wanted !== mode) return;
-    say(soundError(mode, e));
+    saySound(soundError(mode, e));
     // Playback refused because there was no tap yet (a file dropped on a fresh page): the track stays, a tap on Track starts it.
     if (mode === "track" && e?.name === "NotAllowedError" && sound.hasTrack) return;
-    tell(`error:${mode}`);
+    tell(mode === "mic" ? `error:mic-${micReason(e)}` : `error:${mode}`);
     sound.off();
     showSound("off");
   }
   kick();
 }
 
+// Why the mic didn't start: this browser can't ask for it, access was refused, there's no mic, it's busy, or else.
+function micReason(e) {
+  const name = e?.name ?? "";
+  if (e?.message === "insecure") return "unsupported";
+  if (name === "NotAllowedError" || name === "SecurityError") return "denied";
+  if (name === "NotFoundError" || name === "OverconstrainedError") return "none";
+  if (name === "NotReadableError") return "busy";
+  return "other";
+}
+
+// An app's own browser: X's (its user agent names it), any Android web view, or a web view on iPhone (its user agent
+// has no Safari, which Safari, Chrome and Firefox there all carry). There the mic needs the app's access as well as
+// the page's, and an app may never pass it on: refused once, it's the app's settings or the phone's browser.
+const ua = navigator.userAgent;
+const inApp = /Twitter for iPhone|TwitterAndroid|; wv\)/.test(ua) || (/iPhone|iPad|iPod/.test(ua) && !/Safari\//.test(ua));
+
 function soundError(mode, e) {
   const name = e?.name ?? "";
   if (mode === "mic") {
-    if (e?.message === "insecure") return isSecureContext ? "This browser can't use the mic. Try Chrome or Safari." : "The mic only works over HTTPS.";
-    if (name === "NotAllowedError" || name === "SecurityError") return "Mic access is blocked. Allow it for this page and try again.";
-    if (name === "NotFoundError" || name === "OverconstrainedError") return "No mic found.";
-    if (name === "NotReadableError") return "The mic is busy in another app.";
+    const reason = micReason(e);
+    if (reason === "unsupported") return isSecureContext ? "This browser can't use the mic. Try Chrome or Safari." : "The mic only works over HTTPS.";
+    if (reason === "denied") return inApp ? "Mic access is off in this app. Open this page in Chrome or Safari." : "Mic access is blocked. Allow it for this page and try again.";
+    if (reason === "none") return "No mic found.";
+    if (reason === "busy") return "The mic is busy in another app.";
     return "Couldn't start the mic.";
   }
   if (mode === "demo") return "Couldn't play Lofi in this browser.";
@@ -1936,6 +1959,8 @@ videoButton.addEventListener("click", async () => {
     const playing = sound.mode === "track" && sound.audio.paused ? sound.audio.play().catch(() => {}) : null;
     if (sound.mode === "track" && sound.wave) await seekTo(sound.clip);
     await playing;
+    // The track plays now: its name replaces "Tap Track to play it." under Sound.
+    if (playing && !sound.audio.paused) saySound(`♪ ${sound.name}`);
     recorder.start();
     const start = performance.now();
     let prev = start;
@@ -2101,6 +2126,11 @@ function dataUrlBytes(url) {
 
 function say(text) {
   status.textContent = text;
+}
+
+// Sound's own line, under its keys: the track playing, or why a mode didn't start.
+function saySound(text) {
+  soundStatus.textContent = text;
 }
 
 // Plays a CSS animation again from the start, even if the class is still on from the last time.

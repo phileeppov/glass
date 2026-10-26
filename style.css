@@ -615,7 +615,8 @@ button:active {
 .status {
   text-align: center;
 }
-.status:empty {
+.status:empty,
+.sound-status:empty {
   display: none;
 }
 /* Slider: a gray pill with ticks, a white pill thumb with a label.
@@ -1547,7 +1548,8 @@ button:disabled {
   .dock {
     padding: 10px 0;
   }
-  .controls > .hint:not(.caption) {
+  /* Sound's own line stays: it says why a sound didn't start. */
+  .controls > .hint:not(.caption, .sound-status) {
     display: none;
   }
 }

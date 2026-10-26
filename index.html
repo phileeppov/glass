@@ -97,6 +97,8 @@
         </fieldset>
         <!-- With a track: the part a video takes, 12 s, over the song's loudness. It starts on the strongest part. -->
         <label class="range clip" data-clip hidden><input type="range" name="clip" min="0" max="1" step="any" value="0" aria-label="Part of the track to record" /><canvas aria-hidden="true"></canvas><span class="thumb"><span class="name" data-clip-time></span><span class="val" aria-hidden="true"></span></span><i class="detent" aria-hidden="true"></i></label>
+        <!-- What Sound has to say (a track's name, why the mic or a track didn't start), under the keys that caused it. -->
+        <p class="hint sound-status" data-sound-status aria-live="polite"></p>
         <input type="file" class="track-input" accept="audio/*,.mp3,.m4a,.aac,.wav,.ogg,.flac" data-track tabindex="-1" aria-label="Pick a track" />
 
         <details class="advanced" data-advanced>
