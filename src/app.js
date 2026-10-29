@@ -1039,7 +1039,7 @@ root.querySelector("[data-sound-head]").append(bars);
 function showBars() {
   const on = sound.mode !== "off" && !reducedMotion;
   bars.hidden = !on;
-  if (on) sound.bands.forEach((b, i) => (bars.children[i].style.transform = `scaleY(${(0.3 + 0.7 * b).toFixed(3)})`));
+  if (on) sound.bands.forEach((b, i) => (bars.children[i].style.height = `${(30 + 70 * b).toFixed(1)}%`));
 }
 
 // Each key says in small print what you'll get: which PNG, and a video that's the loop, one round of the tune,

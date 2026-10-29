@@ -1385,14 +1385,13 @@ button:disabled {
   display: none;
 }
 /* A quiet band is a short stub, not a dot, and the bars are a shade lighter than the word, so the row reads as one
-   small meter. */
+   small meter. A bar grows by its height, not by a scale: a box lands on whole pixels, a transform doesn't, and a bar
+   rescaled every frame touches the pixel beside it, which some browsers then leave behind as a hairline of ink. */
 .bars i {
   width: 2px;
-  height: 100%;
+  height: 30%;
   border-radius: 1px;
   background: color-mix(in srgb, currentColor 55%, transparent);
-  transform: scaleY(0.3);
-  transform-origin: bottom;
 }
 /* Each preset key shows your own logo in that look: a small glass over the name. */
 .presets label,
